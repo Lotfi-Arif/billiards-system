@@ -10,13 +10,15 @@
     "baseUrl": ".",
     "outDir": "dist",
     "moduleResolution": "node",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@backend/*": ["./src/backend/*"],
+      "@renderer/*": ["./src/renderer/*"]
+    }
   },
-  "exclude": [
-    "node_modules",
-    "src/renderer",
-    "dist",
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
+  "include": ["src", "vitest.config.ts", "vitest.setup.*.ts", "globals.d.ts"],
+  "exclude": ["node_modules", "dist"]
 }
