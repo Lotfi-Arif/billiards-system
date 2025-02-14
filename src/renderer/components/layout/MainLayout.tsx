@@ -13,15 +13,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   onNavigate,
   currentPage,
 }) => {
-  const menuItems = [
-    { icon: "🏠", name: "Dashboard", path: "dashboard" },
-    { icon: "📅", name: "Reservations", path: "reservations" },
-    { icon: "⏱️", name: "Active Sessions", path: "sessions" },
-    { icon: "💰", name: "Payments", path: "payments" },
-    { icon: "📊", name: "Reports", path: "reports" },
-    { icon: "⚙️", name: "Settings", path: "settings" },
-  ];
-
   return (
     <div className="flex h-screen bg-gray-100">
       <Sidebar onNavigate={onNavigate} currentPage={currentPage} />
