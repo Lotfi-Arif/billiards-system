@@ -11,5 +11,12 @@
     "outDir": "dist",
     "moduleResolution": "node",
     "resolveJsonModule": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "src/renderer",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
 }
