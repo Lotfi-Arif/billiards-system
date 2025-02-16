@@ -8,7 +8,7 @@ import {
   LoginDTO,
   AuthResponse,
   JWTPayload,
-} from "../shared/types/User";
+} from "@/shared/types/User";
 
 export class UserService extends BaseService {
   private readonly JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
