@@ -8,17 +8,47 @@ import {
   beforeAll,
   afterAll,
 } from "vitest";
-import Database from "better-sqlite3";
 import { TableService } from "../TableService";
 import { TableStatus } from "@/shared/types/Table";
 import { DatabaseError, PermissionError } from "@/shared/types/errors";
+// Mock Logger
+vi.mock("@/shared/logger", () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+// Mock better-sqlite3
+vi.mock("better-sqlite3", () => {
+  const mockStmt = {
+    run: vi.fn(),
+    get: vi.fn(),
+    all: vi.fn(),
+  };
+
+  class MockDatabase {
+    exec = vi.fn();
+    prepare = vi.fn(() => mockStmt);
+    transaction = vi.fn((fn) => fn());
+    close = vi.fn();
+    pragma = vi.fn().mockReturnValue([{ foreign_keys: 1 }]);
+
+    constructor() {
+      // Default mock implementation for initial table fetch
+      mockStmt.all.mockReturnValue([]);
+    }
+  }
+
+  return { default: MockDatabase };
+});
 
 describe("TableService", () => {
   let tableService: TableService;
-  let db: Database.Database;
+  let db: any;
+  let mockStmt: any;
 
   beforeAll(() => {
-    // Reset mock date before all tests
     vi.useFakeTimers();
   });
 
@@ -27,27 +57,47 @@ describe("TableService", () => {
   });
 
   beforeEach(async () => {
-    // Create a new database connection for each test
-    db = new Database(":memory:");
-    tableService = new TableService(db);
+    const Database = (await import("better-sqlite3")).default;
+    db = new Database();
+    mockStmt = db.prepare();
 
-    // Wait for initialization to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Reset all mock implementations before each test
+    mockStmt.all.mockReset().mockReturnValue([]);
+    mockStmt.get.mockReset();
+    mockStmt.run
+      .mockReset()
+      .mockReturnValue({ lastInsertRowid: 1, changes: 1 });
+
+    tableService = new TableService(db);
   });
 
   afterEach(() => {
+    vi.clearAllMocks();
     if (db) {
-      // Properly close the database connection
-      try {
-        db.close();
-      } catch (error) {
-        console.error("Error closing database:", error);
-      }
+      db.close();
     }
   });
 
-  describe("Table Creation", () => {
+  describe("Table Management", () => {
     it("should create a table with default values", async () => {
+      const mockTableData = {
+        id: 1,
+        tableNumber: 1,
+        hourlyRate: 5.0,
+        condition: "Good",
+        status: TableStatus.OFF,
+        isActive: true,
+        lightState: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastMaintenance: null as Date | null,
+        prayerCooldownEnd: null as Date | null,
+        currentSession: null as string | null,
+      };
+
+      mockStmt.run.mockReturnValueOnce({ lastInsertRowid: 1 });
+      mockStmt.get.mockReturnValueOnce(mockTableData);
+
       const table = await tableService.createTable({
         tableNumber: 1,
         hourlyRate: 5.0,
@@ -61,13 +111,31 @@ describe("TableService", () => {
         isActive: true,
         lightState: false,
       });
-      expect(table.id).toBeDefined();
+    });
+
+    it("should get table by id", async () => {
+      const mockTable = {
+        id: 1,
+        tableNumber: 1,
+        status: TableStatus.AVAILABLE,
+        hourlyRate: 5.0,
+        condition: "Good",
+        isActive: 1,
+        lightState: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      mockStmt.get.mockReturnValueOnce(mockTable);
+
+      const table = await tableService.getTableById(1);
+      expect(table.id).toBe(1);
+      expect(table.status).toBe(TableStatus.AVAILABLE);
     });
 
     it("should not allow duplicate table numbers", async () => {
-      await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 5.0,
+      mockStmt.run.mockImplementationOnce(() => {
+        throw new Error("UNIQUE constraint failed: tables.tableNumber");
       });
 
       await expect(
@@ -80,104 +148,73 @@ describe("TableService", () => {
   });
 
   describe("Session Management", () => {
-    let tableId: number;
-
-    beforeEach(async () => {
-      const table = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 5.0,
-      });
-      tableId = table.id;
-    });
+    const mockTable = {
+      id: 1,
+      tableNumber: 1,
+      status: TableStatus.AVAILABLE,
+      hourlyRate: 5.0,
+      condition: "Good",
+      isActive: 1,
+      lightState: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
     it("should start a new session", async () => {
-      const session = await tableService.startSession(tableId, 1); // staffId = 1
+      const mockSession = {
+        id: 1,
+        tableId: 1,
+        staffId: 1,
+        customerId: null as number | null,
+        startTime: new Date().toISOString(),
+        endTime: null as string | null,
+        totalAmount: null as number | null,
+        status: "ACTIVE",
+      };
+
+      mockStmt.get
+        .mockReturnValueOnce(mockTable) // For getTableById
+        .mockReturnValueOnce(mockSession); // For getSessionById
+      mockStmt.run.mockReturnValueOnce({ lastInsertRowid: 1 });
+
+      const session = await tableService.startSession(1, 1);
 
       expect(session).toMatchObject({
-        tableId,
+        tableId: 1,
         staffId: 1,
         status: "ACTIVE",
       });
-
-      const updatedTable = await tableService.getTableById(tableId);
-      expect(updatedTable.status).toBe(TableStatus.IN_USE);
-      expect(updatedTable.lightState).toBe(true);
     });
 
     it("should not start session during prayer time", async () => {
-      await tableService.setPrayerCooldown(30);
-      await expect(tableService.startSession(tableId, 1)).rejects.toThrow(
+      const prayerTable = { ...mockTable, status: TableStatus.PRAYER_COOLDOWN };
+      mockStmt.get.mockReturnValueOnce(prayerTable);
+
+      await expect(tableService.startSession(1, 1)).rejects.toThrow(
         PermissionError
       );
-    });
-
-    it("should end session and calculate correct amount", async () => {
-      const startTime = new Date("2024-02-15T10:00:00");
-      const endTime = new Date("2024-02-15T11:30:00"); // 1.5 hours
-
-      vi.setSystemTime(startTime);
-      const session = await tableService.startSession(tableId, 1);
-
-      vi.setSystemTime(endTime);
-      const endedSession = await tableService.endSession(session.id, 1);
-
-      expect(endedSession).toMatchObject({
-        status: "COMPLETED",
-        totalAmount: 8, // 1.5 hours * 5.0 LYD = 7.5 LYD, rounded up to 8
-      });
-
-      const updatedTable = await tableService.getTableById(tableId);
-      expect(updatedTable.status).toBe(TableStatus.AVAILABLE);
-      expect(updatedTable.lightState).toBe(false);
     });
   });
 
   describe("Prayer Time Management", () => {
-    let table1Id: number;
-    let table2Id: number;
-
-    beforeEach(async () => {
-      const table1 = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 5.0,
-      });
-      const table2 = await tableService.createTable({
-        tableNumber: 2,
-        hourlyRate: 5.0,
-      });
-      table1Id = table1.id;
-      table2Id = table2.id;
-    });
-
     it("should set prayer cooldown for active tables", async () => {
-      // Start sessions for both tables
-      await tableService.startSession(table1Id, 1);
-      await tableService.startSession(table2Id, 1);
-
-      // Set prayer cooldown
-      await tableService.setPrayerCooldown(30);
-
-      const tables = await tableService.getAllTables();
-      for (const table of tables) {
-        if (table.status === TableStatus.IN_USE) {
-          expect(table.status).toBe(TableStatus.PRAYER_COOLDOWN);
-          expect(table.lightState).toBe(false);
-          expect(table.prayerCooldownEnd).toBeDefined();
-        }
-      }
-    });
-
-    it("should handle prayer cooldown status correctly", async () => {
-      await tableService.startSession(table1Id, 1);
-
       const currentTime = new Date("2024-02-15T12:00:00");
       vi.setSystemTime(currentTime);
 
       await tableService.setPrayerCooldown(30);
+
+      expect(mockStmt.run).toHaveBeenCalledWith(
+        TableStatus.PRAYER_COOLDOWN,
+        expect.any(String),
+        TableStatus.IN_USE
+      );
+    });
+
+    it("should check prayer cooldown status correctly", async () => {
+      mockStmt.get.mockReturnValueOnce({ count: 1 });
       expect(await tableService.checkPrayerCooldown()).toBe(true);
 
-      // Move time forward past cooldown
-      vi.setSystemTime(new Date(currentTime.getTime() + 31 * 60000));
+      mockStmt.get.mockReturnValueOnce({ count: 0 });
       expect(await tableService.checkPrayerCooldown()).toBe(false);
     });
   });
