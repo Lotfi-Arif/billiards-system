@@ -1,0 +1,112 @@
+datasource db {
+    provider = "sqlite"
+    url      = "file:./dev.db"
+}
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+model User {
+    id           String        @id @default(uuid())
+    name         String
+    email        String        @unique
+    password     String
+    role         Role          @default(CUSTOMER)
+    sessions     Session[]
+    reservations Reservation[]
+    activityLogs ActivityLog[]
+    createdAt    DateTime      @default(now())
+    updatedAt    DateTime      @updatedAt
+}
+
+model PoolTable {
+    id           String        @id @default(uuid())
+    number       Int           @unique
+    status       TableStatus   @default(AVAILABLE)
+    isLightOn    Boolean       @default(false)
+    sessions     Session[]
+    reservations Reservation[]
+    createdAt    DateTime      @default(now())
+    updatedAt    DateTime      @updatedAt
+}
+
+model Session {
+    id        String        @id @default(uuid())
+    table     PoolTable     @relation(fields: [tableId], references: [id])
+    tableId   String
+    user      User          @relation(fields: [userId], references: [id])
+    userId    String
+    startTime DateTime      @default(now())
+    endTime   DateTime?
+    type      SessionType
+    duration  Int? // in minutes, for timed sessions
+    cost      Float?
+    status    SessionStatus @default(ACTIVE)
+    createdAt DateTime      @default(now())
+    updatedAt DateTime      @updatedAt
+}
+
+model Reservation {
+    id        String            @id @default(uuid())
+    table     PoolTable         @relation(fields: [tableId], references: [id])
+    tableId   String
+    user      User              @relation(fields: [userId], references: [id])
+    userId    String
+    startTime DateTime
+    duration  Int // in minutes
+    status    ReservationStatus @default(PENDING)
+    createdAt DateTime          @default(now())
+    updatedAt DateTime          @updatedAt
+}
+
+model PrayerTime {
+    id               String   @id @default(uuid())
+    name             String
+    time             DateTime
+    notificationTime DateTime // 10 minutes before
+    durationMinutes  Int      @default(30)
+    createdAt        DateTime @default(now())
+    updatedAt        DateTime @updatedAt
+}
+
+model ActivityLog {
+    id        String   @id @default(uuid())
+    user      User     @relation(fields: [userId], references: [id])
+    userId    String
+    action    String
+    details   String?
+    createdAt DateTime @default(now())
+}
+
+enum Role {
+    MANAGER
+    STAFF
+    CUSTOMER
+}
+
+enum TableStatus {
+    AVAILABLE
+    IN_USE
+    RESERVED
+    MAINTENANCE
+    PRAYER_TIME
+}
+
+enum SessionType {
+    TIMED
+    OPEN
+}
+
+enum SessionStatus {
+    ACTIVE
+    COMPLETED
+    CANCELLED
+}
+
+enum ReservationStatus {
+    PENDING
+    CONFIRMED
+    CANCELLED
+    COMPLETED
+}

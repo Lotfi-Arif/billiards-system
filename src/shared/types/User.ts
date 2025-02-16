@@ -1,58 +1,35 @@
-export interface User {
-  /** A unique identifier for the user */
-  id: number;
-  /** The username the user logs in with */
-  username: string;
-  /** The user’s email address */
-  email: string;
-  /** A hashed version of the user’s password */
-  passwordHash: string;
-  /** The role of the user in the system */
-  role: UserRole;
-  /** Flag to indicate if the user is active */
-  isActive: boolean;
-  /** Optional date of the last successful login */
-  lastLogin?: Date;
-  /** The date when the user was created */
-  createdAt: Date;
-  /** The date when the user was last updated */
-  updatedAt: Date;
-}
+import { Role } from "@prisma/client";
 
-export enum UserRole {
-  ADMIN = "ADMIN",
-  MANAGER = "MANAGER",
-  STAFF = "STAFF",
-  CUSTOMER = "CUSTOMER",
-}
-
-/**
- * Data Transfer Object used when creating a new user.
- * The password provided here will be hashed before storing.
- */
-export interface CreateUserDTO {
-  username: string;
+export interface UserCreateDTO {
+  name: string;
   email: string;
   password: string;
-  /** Optionally, you can provide a role; otherwise a default role should be assigned */
-  role?: UserRole;
+  role: Role;
 }
 
-/**
- * Data Transfer Object used when updating user details.
- * All fields are optional to allow partial updates.
- */
-export interface UpdateUserDTO {
+export interface UserUpdateDTO {
+  name?: string;
   email?: string;
   password?: string;
-  role?: UserRole;
-  isActive?: boolean;
+  role?: Role;
 }
 
-/**
- * UserCredentials are used for the login process.
- */
-export interface UserCredentials {
-  username: string;
+export interface LoginDTO {
+  email: string;
   password: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: Role;
+  };
+}
+
+export interface JWTPayload {
+  userId: string;
+  role: Role;
 }
