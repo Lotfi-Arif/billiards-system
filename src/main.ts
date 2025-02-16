@@ -1,115 +1,43 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
-import Database from "better-sqlite3";
-import { TableService } from "./backend/database/TableService";
-import Logger from "./shared/logger";
-import { initializeIpcHandlers } from "./ipc/handlers";
 import started from "electron-squirrel-startup";
-import { existsSync, mkdirSync } from "fs";
 
-// Global references
-let mainWindow: BrowserWindow | null = null;
-let database: Database.Database | null = null;
-let tableService: TableService | null = null;
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling
+// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
-function initializeDatabase() {
-  try {
-    const userDataPath = app.getPath("userData");
-    const dbPath = path.join(userDataPath, "poolhall.db");
-
-    // Ensure the directory exists
-    if (!existsSync(userDataPath)) {
-      mkdirSync(userDataPath, { recursive: true });
-    }
-
-    Logger.info(`Initializing database at: ${dbPath}`);
-
-    database = new Database(dbPath, {
-      verbose:
-        process.env.NODE_ENV === "development"
-          ? (message?: unknown) => Logger.info(String(message))
-          : undefined,
-      fileMustExist: false,
-      timeout: 5000,
-    });
-
-    database.pragma("journal_mode = WAL");
-    database.pragma("foreign_keys = ON");
-
-    tableService = new TableService(database);
-    Logger.info("Database initialized successfully");
-    return true;
-  } catch (error) {
-    Logger.error("Failed to initialize database:", error);
-    if (database) {
-      try {
-        database.close();
-      } catch (closeError) {
-        Logger.error("Error closing database:", closeError);
-      }
-      database = null;
-    }
-    return false;
-  }
-}
-
 const createWindow = () => {
-  try {
-    // Create the browser window.
-    mainWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, "preload.js"),
-      },
-    });
+  // Create the browser window.
+  const mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
 
-    // Load the app
-    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-      mainWindow.webContents.openDevTools();
-    } else {
-      mainWindow.loadFile(
-        path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
-      );
-    }
-
-    mainWindow.on("closed", () => {
-      mainWindow = null;
-    });
-  } catch (error) {
-    Logger.error("Error creating window:", error);
-    throw error;
+  // and load the index.html of the app.
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+    );
   }
+
+  // Open the DevTools.
+  mainWindow.webContents.openDevTools();
 };
 
-// Initialize app
-app.whenReady().then(() => {
-  try {
-    const dbInitialized = initializeDatabase();
-    if (!dbInitialized) {
-      throw new Error("Failed to initialize database");
-    }
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+app.on("ready", createWindow);
 
-    if (database && tableService) {
-      initializeIpcHandlers(database, tableService);
-    }
-
-    createWindow();
-  } catch (error) {
-    Logger.error("Failed to initialize application:", error);
-    app.quit();
-  }
-});
-
-// Handle window management
+// Quit when all windows are closed, except on macOS. There, it's common
+// for applications and their menu bar to stay active until the user quits
+// explicitly with Cmd + Q.
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
@@ -117,18 +45,12 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
+  // On OS X it's common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-// Cleanup
-app.on("quit", () => {
-  if (database) {
-    try {
-      database.close();
-    } catch (error) {
-      Logger.error("Error closing database on quit:", error);
-    }
-  }
-});
+// In this file you can include the rest of your app's specific main process
+// code. You can also put them in separate files and import them here.

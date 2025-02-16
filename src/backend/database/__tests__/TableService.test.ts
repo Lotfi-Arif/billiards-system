@@ -19,30 +19,7 @@ vi.mock("@/shared/logger", () => ({
   },
 }));
 
-// Mock better-sqlite3
-vi.mock("better-sqlite3", () => {
-  const mockStmt = {
-    run: vi.fn(),
-    get: vi.fn(),
-    all: vi.fn(),
-  };
-
-  class MockDatabase {
-    exec = vi.fn();
-    prepare = vi.fn(() => mockStmt);
-    transaction = vi.fn((fn) => fn());
-    close = vi.fn();
-    pragma = vi.fn().mockReturnValue([{ foreign_keys: 1 }]);
-
-    constructor() {
-      // Default mock implementation for initial table fetch
-      mockStmt.all.mockReturnValue([]);
-    }
-  }
-
-  return { default: MockDatabase };
-});
-
+// Mock better-sqlite3 and Database
 describe("TableService", () => {
   let tableService: TableService;
   let db: any;
