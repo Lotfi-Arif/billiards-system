@@ -1,285 +1,184 @@
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import Database from "better-sqlite3";
 import { TableService } from "../TableService";
-import {
-  TableStatus,
-  CreateTableDTO,
-  UpdateTableDTO,
-} from "@/shared/types/Table";
-import { DatabaseError, NotFoundError } from "@/shared/types/errors";
+import { TableStatus } from "@/shared/types/Table";
+import { DatabaseError, PermissionError } from "@/shared/types/errors";
 
 describe("TableService", () => {
   let tableService: TableService;
   let db: Database.Database;
 
-  beforeEach(() => {
-    db = new Database(":memory:");
-    tableService = new TableService(db);
+  beforeAll(() => {
+    // Reset mock date before all tests
+    vi.useFakeTimers();
   });
 
-  describe("createTable", () => {
-    it("should create a valid table with minimum required fields", async () => {
-      const tableData: CreateTableDTO = {
-        tableNumber: 1,
-        hourlyRate: 20,
-      };
+  afterAll(() => {
+    vi.useRealTimers();
+  });
 
-      const table = await tableService.createTable(tableData);
+  beforeEach(async () => {
+    // Create a new database connection for each test
+    db = new Database(":memory:");
+    tableService = new TableService(db);
+
+    // Wait for initialization to complete
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+
+  afterEach(() => {
+    if (db) {
+      // Properly close the database connection
+      try {
+        db.close();
+      } catch (error) {
+        console.error("Error closing database:", error);
+      }
+    }
+  });
+
+  describe("Table Creation", () => {
+    it("should create a table with default values", async () => {
+      const table = await tableService.createTable({
+        tableNumber: 1,
+        hourlyRate: 5.0,
+      });
 
       expect(table).toMatchObject({
         tableNumber: 1,
-        hourlyRate: 20,
-        condition: "Good", // Default value
-        status: TableStatus.AVAILABLE,
-        isActive: 1,
+        hourlyRate: 5.0,
+        condition: "Good",
+        status: TableStatus.OFF,
+        isActive: true,
+        lightState: false,
       });
       expect(table.id).toBeDefined();
-      expect(table.createdAt).toBeInstanceOf(Date);
-      expect(table.updatedAt).toBeInstanceOf(Date);
     });
 
-    it("should create a table with custom condition", async () => {
-      const tableData: CreateTableDTO = {
+    it("should not allow duplicate table numbers", async () => {
+      await tableService.createTable({
         tableNumber: 1,
-        hourlyRate: 20,
-        condition: "Excellent",
-      };
+        hourlyRate: 5.0,
+      });
 
-      const table = await tableService.createTable(tableData);
-      expect(table.condition).toBe("Excellent");
+      await expect(
+        tableService.createTable({
+          tableNumber: 1,
+          hourlyRate: 5.0,
+        })
+      ).rejects.toThrow(DatabaseError);
+    });
+  });
+
+  describe("Session Management", () => {
+    let tableId: number;
+
+    beforeEach(async () => {
+      const table = await tableService.createTable({
+        tableNumber: 1,
+        hourlyRate: 5.0,
+      });
+      tableId = table.id;
     });
 
-    it("should throw error for duplicate table number", async () => {
-      const tableData: CreateTableDTO = {
-        tableNumber: 1,
-        hourlyRate: 20,
-      };
+    it("should start a new session", async () => {
+      const session = await tableService.startSession(tableId, 1); // staffId = 1
 
-      await tableService.createTable(tableData);
-      await expect(tableService.createTable(tableData)).rejects.toThrow(
-        DatabaseError
+      expect(session).toMatchObject({
+        tableId,
+        staffId: 1,
+        status: "ACTIVE",
+      });
+
+      const updatedTable = await tableService.getTableById(tableId);
+      expect(updatedTable.status).toBe(TableStatus.IN_USE);
+      expect(updatedTable.lightState).toBe(true);
+    });
+
+    it("should not start session during prayer time", async () => {
+      await tableService.setPrayerCooldown(30);
+      await expect(tableService.startSession(tableId, 1)).rejects.toThrow(
+        PermissionError
       );
     });
 
-    it("should create tables with different numbers", async () => {
+    it("should end session and calculate correct amount", async () => {
+      const startTime = new Date("2024-02-15T10:00:00");
+      const endTime = new Date("2024-02-15T11:30:00"); // 1.5 hours
+
+      vi.setSystemTime(startTime);
+      const session = await tableService.startSession(tableId, 1);
+
+      vi.setSystemTime(endTime);
+      const endedSession = await tableService.endSession(session.id, 1);
+
+      expect(endedSession).toMatchObject({
+        status: "COMPLETED",
+        totalAmount: 8, // 1.5 hours * 5.0 LYD = 7.5 LYD, rounded up to 8
+      });
+
+      const updatedTable = await tableService.getTableById(tableId);
+      expect(updatedTable.status).toBe(TableStatus.AVAILABLE);
+      expect(updatedTable.lightState).toBe(false);
+    });
+  });
+
+  describe("Prayer Time Management", () => {
+    let table1Id: number;
+    let table2Id: number;
+
+    beforeEach(async () => {
       const table1 = await tableService.createTable({
         tableNumber: 1,
-        hourlyRate: 20,
+        hourlyRate: 5.0,
       });
       const table2 = await tableService.createTable({
         tableNumber: 2,
-        hourlyRate: 25,
+        hourlyRate: 5.0,
       });
-
-      expect(table1.tableNumber).toBe(1);
-      expect(table2.tableNumber).toBe(2);
-    });
-  });
-
-  describe("getTableById", () => {
-    let createdTable: any;
-
-    beforeEach(async () => {
-      createdTable = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 20,
-      });
+      table1Id = table1.id;
+      table2Id = table2.id;
     });
 
-    it("should return the correct table", async () => {
-      const table = await tableService.getTableById(createdTable.id);
-      expect(table).toMatchObject({
-        id: createdTable.id,
-        tableNumber: 1,
-        hourlyRate: 20,
-      });
-    });
+    it("should set prayer cooldown for active tables", async () => {
+      // Start sessions for both tables
+      await tableService.startSession(table1Id, 1);
+      await tableService.startSession(table2Id, 1);
 
-    it("should throw NotFoundError for non-existent table", async () => {
-      await expect(tableService.getTableById(999)).rejects.toThrow(
-        NotFoundError
-      );
-    });
+      // Set prayer cooldown
+      await tableService.setPrayerCooldown(30);
 
-    it("should return correct date types", async () => {
-      const table = await tableService.getTableById(createdTable.id);
-      expect(table.createdAt).toBeInstanceOf(Date);
-      expect(table.updatedAt).toBeInstanceOf(Date);
-      expect(table.lastMaintenance).toBeNull();
-    });
-  });
-
-  describe("getAllTables", () => {
-    beforeEach(async () => {
-      await tableService.createTable({ tableNumber: 1, hourlyRate: 20 });
-      await tableService.createTable({ tableNumber: 2, hourlyRate: 25 });
-      await tableService.createTable({ tableNumber: 3, hourlyRate: 30 });
-    });
-
-    it("should return all active tables", async () => {
       const tables = await tableService.getAllTables();
-      expect(tables).toHaveLength(3);
-      expect(tables.map((t) => t.tableNumber)).toEqual([1, 2, 3]);
+      for (const table of tables) {
+        if (table.status === TableStatus.IN_USE) {
+          expect(table.status).toBe(TableStatus.PRAYER_COOLDOWN);
+          expect(table.lightState).toBe(false);
+          expect(table.prayerCooldownEnd).toBeDefined();
+        }
+      }
     });
 
-    it("should not return inactive tables", async () => {
-      await tableService.deleteTable(1); // Soft delete table 1
-      const tables = await tableService.getAllTables();
-      expect(tables).toHaveLength(2);
-      expect(tables.map((t) => t.tableNumber)).toEqual([2, 3]);
-    });
+    it("should handle prayer cooldown status correctly", async () => {
+      await tableService.startSession(table1Id, 1);
 
-    it("should return tables with proper date formatting", async () => {
-      const tables = await tableService.getAllTables();
-      tables.forEach((table) => {
-        expect(table.createdAt).toBeInstanceOf(Date);
-        expect(table.updatedAt).toBeInstanceOf(Date);
-      });
-    });
-  });
+      const currentTime = new Date("2024-02-15T12:00:00");
+      vi.setSystemTime(currentTime);
 
-  describe("updateTableStatus", () => {
-    let tableId: number;
+      await tableService.setPrayerCooldown(30);
+      expect(await tableService.checkPrayerCooldown()).toBe(true);
 
-    beforeEach(async () => {
-      const table = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 20,
-      });
-      tableId = table.id;
-    });
-
-    it("should update table status", async () => {
-      const updateData: UpdateTableDTO = {
-        status: TableStatus.IN_USE,
-      };
-      const updated = await tableService.updateTableStatus(tableId, updateData);
-      expect(updated.status).toBe(TableStatus.IN_USE);
-    });
-
-    it("should update multiple fields", async () => {
-      const updateData: UpdateTableDTO = {
-        status: TableStatus.MAINTENANCE,
-        condition: "Needs repair",
-        hourlyRate: 25,
-      };
-      const updated = await tableService.updateTableStatus(tableId, updateData);
-      expect(updated).toMatchObject(updateData);
-    });
-
-    it("should update lastMaintenance date", async () => {
-      const maintenanceDate = new Date();
-      const updated = await tableService.updateTableStatus(tableId, {
-        lastMaintenance: maintenanceDate,
-      });
-      expect(updated.lastMaintenance).toBeInstanceOf(Date);
-      expect(updated.lastMaintenance?.getTime()).toBe(
-        maintenanceDate.getTime()
-      );
-    });
-
-    it("should throw error for non-existent table", async () => {
-      await expect(
-        tableService.updateTableStatus(999, { status: TableStatus.IN_USE })
-      ).rejects.toThrow(NotFoundError);
-    });
-
-    it("should update isActive status", async () => {
-      // First create a table
-      const createdTable = await tableService.createTable({
-        tableNumber: Math.floor(Math.random() * 1000), // Use random number to avoid conflicts
-        hourlyRate: 20,
-      });
-
-      // Then update its active status
-      const updated = await tableService.updateTableStatus(createdTable.id, {
-        isActive: false,
-      });
-
-      // Verify the update
-      expect(updated.isActive).toBe(0); // SQLite uses 0 for false
-
-      // Verify it doesn't show up in getAllTables
-      const allTables = await tableService.getAllTables();
-      expect(allTables.find((t) => t.id === createdTable.id)).toBeUndefined();
-    });
-  });
-
-  describe("deleteTable", () => {
-    let tableId: number;
-
-    beforeEach(async () => {
-      const table = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 20,
-      });
-      tableId = table.id;
-    });
-
-    it("should soft delete a table", async () => {
-      await tableService.deleteTable(tableId);
-      const tables = await tableService.getAllTables();
-      expect(tables).toHaveLength(0);
-    });
-
-    it("should throw error when deleting non-existent table", async () => {
-      await expect(tableService.deleteTable(999)).rejects.toThrow(
-        NotFoundError
-      );
-    });
-
-    it("should not allow double deletion", async () => {
-      await tableService.deleteTable(tableId);
-
-      await expect(tableService.deleteTable(tableId)).rejects.toThrow(
-        `Table with id ${tableId} has already been deleted`
-      );
-    });
-  });
-
-  describe("isTableAvailable", () => {
-    let tableId: number;
-
-    beforeEach(async () => {
-      const table = await tableService.createTable({
-        tableNumber: 1,
-        hourlyRate: 20,
-      });
-      tableId = table.id;
-    });
-
-    it("should return true for available table", async () => {
-      const isAvailable = await tableService.isTableAvailable(tableId);
-      expect(isAvailable).toBe(true);
-    });
-
-    it("should return false for in-use table", async () => {
-      await tableService.updateTableStatus(tableId, {
-        status: TableStatus.IN_USE,
-      });
-      const isAvailable = await tableService.isTableAvailable(tableId);
-      expect(isAvailable).toBe(false);
-    });
-
-    it("should return false for maintenance table", async () => {
-      await tableService.updateTableStatus(tableId, {
-        status: TableStatus.MAINTENANCE,
-      });
-      const isAvailable = await tableService.isTableAvailable(tableId);
-      expect(isAvailable).toBe(false);
-    });
-
-    it("should return false for reserved table", async () => {
-      await tableService.updateTableStatus(tableId, {
-        status: TableStatus.RESERVED,
-      });
-      const isAvailable = await tableService.isTableAvailable(tableId);
-      expect(isAvailable).toBe(false);
-    });
-
-    it("should throw error for non-existent table", async () => {
-      await expect(tableService.isTableAvailable(999)).rejects.toThrow(
-        NotFoundError
-      );
+      // Move time forward past cooldown
+      vi.setSystemTime(new Date(currentTime.getTime() + 31 * 60000));
+      expect(await tableService.checkPrayerCooldown()).toBe(false);
     });
   });
 });

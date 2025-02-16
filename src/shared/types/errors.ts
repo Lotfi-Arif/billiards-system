@@ -38,6 +38,12 @@ export class NotFoundError extends ApplicationError {
   }
 }
 
+export class PermissionError extends ApplicationError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, "PERMISSION_ERROR", details);
+  }
+}
+
 export class BusinessError extends ApplicationError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, "BUSINESS_ERROR", details);
