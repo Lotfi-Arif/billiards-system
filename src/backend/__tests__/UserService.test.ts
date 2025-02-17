@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, Mock } from "vitest";
 import { PrismaClient, Role, User } from "@prisma/client";
 import { UserService } from "../UserService";
 import bcrypt from "bcrypt";
@@ -143,7 +143,7 @@ describe("UserService", () => {
 
     it("should throw error if password is invalid", async () => {
       prisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      vi.mocked(bcrypt.compare).mockResolvedValueOnce(false);
+      (bcrypt.compare as Mock).mockResolvedValueOnce(false);
 
       await expect(userService.login(loginDTO)).rejects.toThrow(
         "Invalid email or password"
