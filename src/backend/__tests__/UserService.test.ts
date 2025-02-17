@@ -8,15 +8,16 @@ import prisma from "@shared/__mocks__/prisma";
 // Mock implementations need to be before any other code due to hoisting
 vi.mock("../libs/prisma");
 
-vi.mock("bcrypt", () => {
-  return {
-    default: {
-      hash: vi.fn().mockResolvedValue("hashedPassword123"),
-      compare: vi.fn().mockResolvedValue(true),
-    },
-  };
-});
+// Mock bcrypt
+vi.mock("bcrypt", () => ({
+  __esModule: true,
+  default: {
+    hash: vi.fn().mockResolvedValue("hashedPassword123"),
+    compare: vi.fn().mockResolvedValue(true),
+  },
+}));
 
+// Mock jwt
 vi.mock("jsonwebtoken", () => {
   return {
     default: {
@@ -73,7 +74,7 @@ describe("UserService", () => {
         data: {
           userId: mockUser.id,
           action: "USER_CREATED",
-          description: `User ${mockUser.name} created`,
+          details: `User ${mockUser.name} created`,
         },
       });
       expect(result).toEqual(mockUser);
@@ -118,7 +119,7 @@ describe("UserService", () => {
         data: {
           userId: mockUser.id,
           action: "USER_LOGIN",
-          description: `User ${mockUser.name} logged in`,
+          details: `User ${mockUser.name} logged in`,
         },
       });
       expect(result).toEqual({
@@ -142,7 +143,7 @@ describe("UserService", () => {
 
     it("should throw error if password is invalid", async () => {
       prisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      bcrypt.compare.mockResolvedValueOnce(false);
+      vi.mocked(bcrypt.compare).mockResolvedValueOnce(false);
 
       await expect(userService.login(loginDTO)).rejects.toThrow(
         "Invalid email or password"
@@ -188,7 +189,7 @@ describe("UserService", () => {
   describe("updateUser", () => {
     const updateUserDTO = {
       name: "Updated Name",
-      password: "newpassword123",
+      password: "hashedPassword123",
     };
 
     it("should update user successfully", async () => {
@@ -209,7 +210,7 @@ describe("UserService", () => {
         data: {
           userId: mockUser.id,
           action: "USER_UPDATED",
-          description: `User ${updatedUser.name} updated`,
+          details: `User ${updatedUser.name} updated`,
         },
       });
       expect(result).toEqual(updatedUser);
@@ -232,7 +233,7 @@ describe("UserService", () => {
         data: {
           userId: mockUser.id,
           action: "USER_DELETED",
-          description: `User ${mockUser.name} deleted`,
+          details: `User ${mockUser.name} deleted`,
         },
       });
     });
