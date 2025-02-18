@@ -1,4 +1,3 @@
-// src/renderer/components/Dashboard.tsx
 import React from "react";
 import TableGrid from "./tables/TableGrid";
 

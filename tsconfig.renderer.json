@@ -16,9 +16,12 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@backend/*": ["./src/backend/*"],
+      "@renderer/*": ["./src/renderer/*"]
     }
   },
-  "include": ["src/renderer/**/*", "globals.d.ts"],
+  "include": ["src/renderer/**/*", "src/shared/**/*", "globals.d.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

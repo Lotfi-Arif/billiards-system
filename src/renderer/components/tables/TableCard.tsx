@@ -1,20 +1,17 @@
 import React from "react";
-import { Table, TableStatus } from "../../../shared/types/Table";
+import { TableStatus } from "@prisma/client";
+import { TableWithSessions } from "../../../shared/types/Table";
 
 interface TableCardProps {
-  table: Table;
-  onAction?: (
-    action: "open" | "close" | "reserve" | "maintenance" | "cooldown"
-  ) => void;
-  timeRemaining?: string;
-  reservedFor?: string;
+  table: TableWithSessions;
+  onAction?: (action: "open" | "close" | "reserve" | "maintenance") => void;
+  currentUser?: { id: string; role: string };
 }
 
 const TableCard: React.FC<TableCardProps> = ({
   table,
   onAction,
-  timeRemaining,
-  reservedFor,
+  currentUser,
 }) => {
   const getStatusColor = (status: TableStatus) => {
     switch (status) {
@@ -26,10 +23,8 @@ const TableCard: React.FC<TableCardProps> = ({
         return "border-yellow-500 bg-yellow-50";
       case TableStatus.MAINTENANCE:
         return "border-gray-500 bg-gray-50";
-      case TableStatus.COOLDOWN:
-        return "border-purple-500 bg-purple-50";
-      case TableStatus.OFF:
-        return "border-gray-300 bg-gray-50";
+      case TableStatus.PRAYER_TIME:
+        return "border-blue-500 bg-blue-50";
       default:
         return "border-gray-300";
     }
@@ -45,14 +40,14 @@ const TableCard: React.FC<TableCardProps> = ({
         return "bg-yellow-100 text-yellow-800";
       case TableStatus.MAINTENANCE:
         return "bg-gray-100 text-gray-800";
-      case TableStatus.COOLDOWN:
-        return "bg-purple-100 text-purple-800";
-      case TableStatus.OFF:
-        return "bg-gray-100 text-gray-800";
+      case TableStatus.PRAYER_TIME:
+        return "bg-blue-100 text-blue-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  const activeSession = table.sessions.find((session) => !session.endTime);
 
   return (
     <div
@@ -63,11 +58,15 @@ const TableCard: React.FC<TableCardProps> = ({
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-bold text-gray-800">
-            Table {table.tableNumber}
+            Table {table.number}
           </h3>
-          <span className="text-sm text-gray-600">
-            ${table.hourlyRate}/hour
-          </span>
+          {activeSession && (
+            <span className="text-sm text-gray-600">
+              {activeSession.type === "TIMED"
+                ? `${activeSession.duration} minutes`
+                : "Open session"}
+            </span>
+          )}
         </div>
         <div className="flex items-center">
           <span
@@ -80,24 +79,17 @@ const TableCard: React.FC<TableCardProps> = ({
         </div>
       </div>
 
-      {timeRemaining && (
-        <div className="mb-4 text-center">
-          <span className="text-sm text-gray-600">Time Remaining</span>
-          <div className="text-2xl font-bold text-gray-800">
-            {timeRemaining}
+      {activeSession && (
+        <div className="mb-4">
+          <span className="text-sm text-gray-600">Started at</span>
+          <div className="text-lg font-medium text-gray-800">
+            {new Date(activeSession.startTime).toLocaleTimeString()}
           </div>
         </div>
       )}
 
-      {reservedFor && (
-        <div className="mb-4 text-center">
-          <span className="text-sm text-gray-600">Reserved for</span>
-          <div className="text-lg font-medium text-gray-800">{reservedFor}</div>
-        </div>
-      )}
-
       <div className="grid grid-cols-2 gap-2 mt-4">
-        {table.status === TableStatus.AVAILABLE && (
+        {table.status === TableStatus.AVAILABLE && currentUser && (
           <>
             <button
               onClick={() => onAction?.("open")}
@@ -113,7 +105,7 @@ const TableCard: React.FC<TableCardProps> = ({
             </button>
           </>
         )}
-        {table.status === TableStatus.IN_USE && (
+        {table.status === TableStatus.IN_USE && currentUser && (
           <button
             onClick={() => onAction?.("close")}
             className="col-span-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors"
@@ -121,8 +113,8 @@ const TableCard: React.FC<TableCardProps> = ({
             Close Table
           </button>
         )}
-        {table.status !== TableStatus.MAINTENANCE &&
-          table.status !== TableStatus.COOLDOWN && (
+        {currentUser?.role === "MANAGER" &&
+          table.status !== TableStatus.MAINTENANCE && (
             <button
               onClick={() => onAction?.("maintenance")}
               className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-colors mt-2"

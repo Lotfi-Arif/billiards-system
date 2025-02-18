@@ -1,81 +1,67 @@
+import { PoolTableService } from "@/backend/PoolTableService";
+import { ApiResponse } from "@/shared/types/api";
+import { IpcChannels, TableOperations } from "@/shared/types/ipc";
 import { ipcMain } from "electron";
-import Database from "better-sqlite3";
-import { TableService } from "../backend/database/TableService";
-import { TableStatus } from "../shared/types/Table";
-import Logger from "../shared/logger";
 
-export function initializeIpcHandlers(
-  database: Database.Database,
-  tableService: TableService
+// Type-safe handler function
+function createHandler<K extends IpcChannels>(
+  channel: K,
+  handler: (
+    args: TableOperations[K]["request"]
+  ) => Promise<TableOperations[K]["response"]>
 ) {
-  if (!tableService) {
-    throw new Error("TableService not initialized");
-  }
-
-  ipcMain.handle("get-tables", async () => {
-    try {
-      Logger.info("IPC: get-tables called");
-      const tables = await tableService.getAllTables();
-      return { success: true, data: tables };
-    } catch (error) {
-      Logger.error("IPC get-tables error:", error);
-      return { success: false, error: String(error) };
+  return ipcMain.handle(
+    channel,
+    async (
+      _,
+      args: TableOperations[K]["request"]
+    ): Promise<ApiResponse<TableOperations[K]["response"]>> => {
+      try {
+        const result = await handler(args);
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     }
+  );
+}
+
+export function setupTableHandlers(tableService: PoolTableService) {
+  // Get all tables
+  createHandler(IpcChannels.TABLE_GET_ALL, async () => {
+    return tableService.getAllTables();
   });
 
-  ipcMain.handle(
-    "open-table",
-    async (event, id: number, performedBy?: number) => {
-      try {
-        Logger.info(`IPC: open-table called for table ${id}`);
-        const table = await tableService.updateTableStatus(
-          id,
-          { status: TableStatus.IN_USE },
-          performedBy
-        );
-        return { success: true, data: table };
-      } catch (error) {
-        Logger.error(`IPC open-table error:`, error);
-        return { success: false, error: String(error) };
-      }
+  // Get table status
+  createHandler(IpcChannels.TABLE_GET_STATUS, async ({ tableId }) => {
+    return tableService.getTableStatus(tableId);
+  });
+
+  // Create table
+  createHandler(IpcChannels.TABLE_CREATE, async ({ number }) => {
+    return tableService.createTable({ number });
+  });
+
+  // Open table
+  createHandler(
+    IpcChannels.TABLE_OPEN,
+    async ({ tableId, userId, sessionType, duration }) => {
+      return tableService.openTable(tableId, userId, sessionType, duration);
     }
   );
 
-  ipcMain.handle(
-    "close-table",
-    async (event, id: number, performedBy?: number) => {
-      try {
-        Logger.info(`IPC: close-table called for table ${id}`);
-        const table = await tableService.updateTableStatus(
-          id,
-          { status: TableStatus.AVAILABLE },
-          performedBy
-        );
-        return { success: true, data: table };
-      } catch (error) {
-        Logger.error(`IPC close-table error:`, error);
-        return { success: false, error: String(error) };
-      }
-    }
-  );
+  // Close table
+  createHandler(IpcChannels.TABLE_CLOSE, async ({ tableId, userId }) => {
+    return tableService.closeTable(tableId, userId);
+  });
 
-  ipcMain.handle(
-    "update-table-status",
-    async (event, id: number, data: any, performedBy?: number) => {
-      try {
-        Logger.info(`IPC: update-table-status called for table ${id}`);
-        const table = await tableService.updateTableStatus(
-          id,
-          data,
-          performedBy
-        );
-        return { success: true, data: table };
-      } catch (error) {
-        Logger.error(`IPC update-table-status error:`, error);
-        return { success: false, error: String(error) };
-      }
-    }
-  );
+  // Update table
+  createHandler(IpcChannels.TABLE_UPDATE, async ({ tableId, userId, data }) => {
+    return tableService.updateTable(tableId, userId, data);
+  });
 
-  Logger.info("IPC handlers initialized successfully");
+  // Set table maintenance
+  createHandler(IpcChannels.TABLE_MAINTENANCE, async ({ tableId, userId }) => {
+    return tableService.setTableMaintenance(tableId, userId);
+  });
 }

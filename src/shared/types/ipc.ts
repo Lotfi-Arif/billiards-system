@@ -1,33 +1,68 @@
+import { PoolTable, SessionType, TableStatus } from "@prisma/client";
+
 export enum IpcChannels {
-  // User Management
-  USER_LOGIN = "user:login",
-  USER_CREATE = "user:create",
-
-  // Table Management
   TABLE_GET_ALL = "table:getAll",
-  TABLE_UPDATE_STATUS = "table:updateStatus",
+  TABLE_GET_STATUS = "table:getStatus",
+  TABLE_CREATE = "table:create",
+  TABLE_OPEN = "table:open",
+  TABLE_CLOSE = "table:close",
+  TABLE_UPDATE = "table:update",
   TABLE_MAINTENANCE = "table:maintenance",
-
-  // Session Management
-  SESSION_START = "session:start",
-  SESSION_END = "session:end",
-
-  // Reservation Management
-  RESERVATION_CREATE = "reservation:create",
-  RESERVATION_CONFIRM = "reservation:confirm",
-
-  // Prayer Time Management
-  PRAYER_GET_NEXT = "prayer:getNext",
-  PRAYER_CHECK_TIME = "prayer:checkTime",
-
-  // System Status
-  SYSTEM_STATUS = "system:status",
 }
 
-export interface IpcHandlers {
-  [IpcChannels.USER_LOGIN]: {
-    request: { username: string; password: string };
-    response: { id: number; username: string; role: string } | null;
+export interface TableOperations {
+  [IpcChannels.TABLE_GET_ALL]: {
+    request: void;
+    response: PoolTable[];
   };
-  // Add other handler types here...
+
+  [IpcChannels.TABLE_GET_STATUS]: {
+    request: { tableId: string };
+    response: PoolTable;
+  };
+
+  [IpcChannels.TABLE_CREATE]: {
+    request: {
+      number: number;
+    };
+    response: PoolTable;
+  };
+
+  [IpcChannels.TABLE_OPEN]: {
+    request: {
+      tableId: string;
+      userId: string;
+      sessionType: SessionType;
+      duration?: number;
+    };
+    response: PoolTable;
+  };
+
+  [IpcChannels.TABLE_CLOSE]: {
+    request: {
+      tableId: string;
+      userId: string;
+    };
+    response: PoolTable;
+  };
+
+  [IpcChannels.TABLE_UPDATE]: {
+    request: {
+      tableId: string;
+      userId: string;
+      data: {
+        status?: TableStatus;
+        isLightOn?: boolean;
+      };
+    };
+    response: PoolTable;
+  };
+
+  [IpcChannels.TABLE_MAINTENANCE]: {
+    request: {
+      tableId: string;
+      userId: string;
+    };
+    response: PoolTable;
+  };
 }

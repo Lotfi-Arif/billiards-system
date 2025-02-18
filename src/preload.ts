@@ -1,41 +1,41 @@
-// See the Electron documentation for details on how to use preload scripts:
-// https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
+import { ApiResponse, ElectronAPI } from "@/shared/types/api";
+import { IpcChannels, TableOperations } from "@/shared/types/ipc";
 import { contextBridge, ipcRenderer } from "electron";
-import type { ElectronAPI } from "./shared/types/electronAPI";
-import type { ApiResponse } from "./shared/types/api";
-import type { Table } from "./shared/types/Table";
+
+// Type-safe invoke function
+function createInvoke<K extends IpcChannels>(
+  channel: K
+): (
+  args: TableOperations[K]["request"]
+) => Promise<ApiResponse<TableOperations[K]["response"]>> {
+  return (args) => ipcRenderer.invoke(channel, args);
+}
 
 // Create the API object that will be exposed to the renderer
 const api: ElectronAPI = {
-  // Table operations
-  getTables: () =>
-    ipcRenderer.invoke("get-tables") as Promise<ApiResponse<Table[]>>,
-  getTable: (id) =>
-    ipcRenderer.invoke("get-table", id) as Promise<ApiResponse<Table>>,
-  updateTableStatus: (id, data, performedBy) =>
-    ipcRenderer.invoke("update-table-status", id, data, performedBy) as Promise<
-      ApiResponse<Table>
-    >,
-  openTable: (id, performedBy) =>
-    ipcRenderer.invoke("open-table", id, performedBy) as Promise<
-      ApiResponse<Table>
-    >,
-  closeTable: (id, performedBy) =>
-    ipcRenderer.invoke("close-table", id, performedBy) as Promise<
-      ApiResponse<Table>
-    >,
-  setTableMaintenance: (id, performedBy) =>
-    ipcRenderer.invoke("set-table-maintenance", id, performedBy) as Promise<
-      ApiResponse<Table>
-    >,
-  setTableCooldown: (id, performedBy) =>
-    ipcRenderer.invoke("set-table-cooldown", id, performedBy) as Promise<
-      ApiResponse<Table>
-    >,
-  isTableAvailable: (id) =>
-    ipcRenderer.invoke("is-table-available", id) as Promise<
-      ApiResponse<boolean>
-    >,
+  getTables: () => createInvoke(IpcChannels.TABLE_GET_ALL)(),
+
+  getTableStatus: (tableId) =>
+    createInvoke(IpcChannels.TABLE_GET_STATUS)({ tableId }),
+
+  createTable: (number) => createInvoke(IpcChannels.TABLE_CREATE)({ number }),
+
+  openTable: (tableId, userId, sessionType, duration) =>
+    createInvoke(IpcChannels.TABLE_OPEN)({
+      tableId,
+      userId,
+      sessionType,
+      duration,
+    }),
+
+  closeTable: (tableId, userId) =>
+    createInvoke(IpcChannels.TABLE_CLOSE)({ tableId, userId }),
+
+  updateTable: (tableId, userId, data) =>
+    createInvoke(IpcChannels.TABLE_UPDATE)({ tableId, userId, data }),
+
+  setTableMaintenance: (tableId, userId) =>
+    createInvoke(IpcChannels.TABLE_MAINTENANCE)({ tableId, userId }),
 };
 
 // Expose the API to the renderer process
