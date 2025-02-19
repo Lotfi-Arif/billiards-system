@@ -19,6 +19,11 @@
       "@renderer/*": ["./src/renderer/*"]
     }
   },
-  "include": ["src", "vitest.config.ts", "vitest.setup.*.ts", "globals.d.ts"],
+  "include": [
+    "src",
+    "vitest.config.ts",
+    "vitest.setup.*.ts",
+    "src/globals.d.ts"
+  ],
   "exclude": ["node_modules", "dist", "src/renderer/**/*"]
 }

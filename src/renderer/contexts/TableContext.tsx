@@ -1,130 +1,138 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { Table, TableStatus } from "../../shared/types/Table";
-import { ApiResponse } from "../../shared/types/api";
+import { create } from "zustand";
+import { TableStatus, SessionType } from "@prisma/client";
+import { TableWithSessions } from "../../shared/types/Table";
 
-interface TableContextType {
-  tables: ApiResponse<Table[]>;
-  loading: boolean;
-  error: string | null;
-  refreshTables: () => Promise<void>;
-  updateTableStatus: (
-    id: number,
-    status: TableStatus,
-    performedBy?: number
+interface TableState {
+  tables: TableWithSessions[];
+  isLoading: boolean;
+  error: Error | null;
+
+  fetchTables: () => Promise<void>;
+  openTable: (
+    tableId: string,
+    userId: string,
+    sessionType: SessionType,
+    duration?: number
   ) => Promise<void>;
-  openTable: (id: number, performedBy?: number) => Promise<void>;
-  closeTable: (id: number, performedBy?: number) => Promise<void>;
-  setTableMaintenance: (id: number, performedBy?: number) => Promise<void>;
-  setTableCooldown: (id: number, performedBy?: number) => Promise<void>;
+  closeTable: (tableId: string, userId: string) => Promise<void>;
+  setTableMaintenance: (tableId: string, userId: string) => Promise<void>;
+  updateTableStatus: (
+    tableId: string,
+    userId: string,
+    status: TableStatus
+  ) => Promise<void>;
 }
 
-const TableContext = createContext<TableContextType | undefined>(undefined);
+export const useTableStore = create<TableState>((set, get) => ({
+  tables: [],
+  isLoading: false,
+  error: null,
 
-export const TableProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [tables, setTables] = useState<ApiResponse<Table[]>>({
-    success: false,
-    data: [],
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refreshTables = async () => {
+  fetchTables: async () => {
     try {
-      setLoading(true);
+      set({ isLoading: true });
       const response = await window.electron.getTables();
-      setTables(response);
-      setError(null);
-    } catch (err) {
-      setError("Failed to load tables");
-      console.error("Error loading tables:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const updateTableStatus = async (
-    id: number,
-    status: TableStatus,
-    performedBy?: number
-  ) => {
+      if (!response.success) {
+        throw new Error(response.error || "Failed to fetch tables");
+      }
+
+      set({
+        tables: response.data || [],
+        isLoading: false,
+        error: null,
+      });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err : new Error(String(err)),
+        isLoading: false,
+      });
+    }
+  },
+
+  openTable: async (tableId, userId, sessionType, duration) => {
     try {
-      await window.electron.updateTableStatus(id, { status }, performedBy);
-      await refreshTables();
-    } catch (err) {
-      setError("Failed to update table status");
-      console.error("Error updating table:", err);
-    }
-  };
+      set({ isLoading: true });
+      const response = await window.electron.openTable(
+        tableId,
+        userId,
+        sessionType,
+        duration
+      );
 
-  const openTable = async (id: number, performedBy?: number) => {
+      if (!response.success) {
+        throw new Error(response.error || "Failed to open table");
+      }
+
+      // Refresh tables after operation
+      await get().fetchTables();
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err : new Error(String(err)),
+        isLoading: false,
+      });
+    }
+  },
+
+  closeTable: async (tableId, userId) => {
     try {
-      await window.electron.openTable(id, performedBy);
-      await refreshTables();
-    } catch (err) {
-      setError("Failed to open table");
-      console.error("Error opening table:", err);
-    }
-  };
+      set({ isLoading: true });
+      const response = await window.electron.closeTable(tableId, userId);
 
-  const closeTable = async (id: number, performedBy?: number) => {
+      if (!response.success) {
+        throw new Error(response.error || "Failed to close table");
+      }
+
+      // Refresh tables after operation
+      await get().fetchTables();
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err : new Error(String(err)),
+        isLoading: false,
+      });
+    }
+  },
+
+  setTableMaintenance: async (tableId, userId) => {
     try {
-      await window.electron.closeTable(id, performedBy);
-      await refreshTables();
-    } catch (err) {
-      setError("Failed to close table");
-      console.error("Error closing table:", err);
-    }
-  };
+      set({ isLoading: true });
+      const response = await window.electron.setTableMaintenance(
+        tableId,
+        userId
+      );
 
-  const setTableMaintenance = async (id: number, performedBy?: number) => {
+      if (!response.success) {
+        throw new Error(response.error || "Failed to set table maintenance");
+      }
+
+      // Refresh tables after operation
+      await get().fetchTables();
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err : new Error(String(err)),
+        isLoading: false,
+      });
+    }
+  },
+
+  updateTableStatus: async (tableId, userId, status) => {
     try {
-      await window.electron.setTableMaintenance(id, performedBy);
-      await refreshTables();
+      set({ isLoading: true });
+      const response = await window.electron.updateTable(tableId, userId, {
+        status,
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to update table status");
+      }
+
+      // Refresh tables after operation
+      await get().fetchTables();
     } catch (err) {
-      setError("Failed to set table maintenance");
-      console.error("Error setting maintenance:", err);
+      set({
+        error: err instanceof Error ? err : new Error(String(err)),
+        isLoading: false,
+      });
     }
-  };
-
-  const setTableCooldown = async (id: number, performedBy?: number) => {
-    try {
-      await window.electron.setTableCooldown(id, performedBy);
-      await refreshTables();
-    } catch (err) {
-      setError("Failed to set table cooldown");
-      console.error("Error setting cooldown:", err);
-    }
-  };
-
-  useEffect(() => {
-    refreshTables();
-  }, []);
-
-  return (
-    <TableContext.Provider
-      value={{
-        tables,
-        loading,
-        error,
-        refreshTables,
-        updateTableStatus,
-        openTable,
-        closeTable,
-        setTableMaintenance,
-        setTableCooldown,
-      }}
-    >
-      {children}
-    </TableContext.Provider>
-  );
-};
-
-export const useTables = () => {
-  const context = useContext(TableContext);
-  if (context === undefined) {
-    throw new Error("useTables must be used within a TableProvider");
-  }
-  return context;
-};
+  },
+}));

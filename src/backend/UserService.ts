@@ -78,6 +78,45 @@ export class UserService extends BaseService {
     };
   }
 
+  async logout(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await this.logActivity(
+      userId,
+      "USER_LOGOUT",
+      `User ${user.name} logged out`
+    );
+
+    // Note: In a stateful session system, you might invalidate the token in a
+    // token blacklist or session store here
+  }
+
+  async getCurrentUser(userId: string): Promise<Omit<User, "password"> | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return user;
+  }
+
   async updateUser(userId: string, data: UserUpdateDTO): Promise<User> {
     if (data.password) {
       data.password = await bcrypt.hash(data.password, this.SALT_ROUNDS);

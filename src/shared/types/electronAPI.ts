@@ -1,35 +1,34 @@
-import { ApiResponse, DailyPrayerTimes, PrayerTime } from "./api";
-import { CreatePaymentDTO, Payment } from "./Payment";
-import { CreateReservationDTO, Reservation } from "./Reservation";
-import { CreateSessionDTO, EndSessionDTO, Session } from "./Session";
-import { Table, TableStatus, UpdateTableDTO } from "./Table";
-import { User, CreateUserDTO } from "./User";
+import { PoolTable, TableStatus, SessionType } from "@prisma/client";
+import { ApiResponse } from "./api";
+import { AuthResponse } from "./User";
 
 export interface ElectronAPI {
+  // User operations
+  login(credentials: {
+    email: string;
+    password: string;
+  }): Promise<ApiResponse<AuthResponse>>;
+  logout(): Promise<ApiResponse<void>>;
+  getCurrentUser(): Promise<ApiResponse<any>>;
+
   // Table operations
-  getTables: () => Promise<ApiResponse<Table[]>>;
-
-  getTable: (id: number) => Promise<ApiResponse<Table>>;
-
-  updateTableStatus: (
-    id: number,
-    data: UpdateTableDTO,
-    performedBy?: number
-  ) => Promise<ApiResponse<Table>>;
-
-  openTable: (id: number, performedBy?: number) => Promise<ApiResponse<Table>>;
-
-  closeTable: (id: number, performedBy?: number) => Promise<ApiResponse<Table>>;
-
-  setTableMaintenance: (
-    id: number,
-    performedBy?: number
-  ) => Promise<ApiResponse<Table>>;
-
-  setTableCooldown: (
-    id: number,
-    performedBy?: number
-  ) => Promise<ApiResponse<Table>>;
-
-  isTableAvailable: (id: number) => Promise<ApiResponse<boolean>>;
+  getTables(): Promise<ApiResponse<PoolTable[]>>;
+  getTableStatus(tableId: string): Promise<ApiResponse<PoolTable>>;
+  createTable(number: number): Promise<ApiResponse<PoolTable>>;
+  openTable(
+    tableId: string,
+    userId: string,
+    sessionType: SessionType,
+    duration?: number
+  ): Promise<ApiResponse<PoolTable>>;
+  closeTable(tableId: string, userId: string): Promise<ApiResponse<PoolTable>>;
+  updateTable(
+    tableId: string,
+    userId: string,
+    data: { status?: TableStatus; isLightOn?: boolean }
+  ): Promise<ApiResponse<PoolTable>>;
+  setTableMaintenance(
+    tableId: string,
+    userId: string
+  ): Promise<ApiResponse<PoolTable>>;
 }
