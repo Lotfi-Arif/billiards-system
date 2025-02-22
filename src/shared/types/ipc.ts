@@ -8,6 +8,9 @@ export enum IpcChannels {
   TABLE_CLOSE = "table:close",
   TABLE_UPDATE = "table:update",
   TABLE_MAINTENANCE = "table:maintenance",
+  AUTH_LOGIN = "auth:login",
+  AUTH_LOGOUT = "auth:logout",
+  AUTH_GET_CURRENT_USER = "auth:getCurrentUser",
 }
 
 export interface TableOperations {
@@ -64,5 +67,23 @@ export interface TableOperations {
       userId: string;
     };
     response: PoolTable;
+  };
+
+  [IpcChannels.AUTH_LOGIN]: {
+    request: {
+      email: string;
+      password: string;
+    };
+    response: any;
+  };
+
+  [IpcChannels.AUTH_LOGOUT]: {
+    request: void;
+    response: void;
+  };
+
+  [IpcChannels.AUTH_GET_CURRENT_USER]: {
+    request: void;
+    response: any;
   };
 }

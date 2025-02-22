@@ -1,6 +1,11 @@
 import { PoolTable, TableStatus, SessionType } from "@prisma/client";
-import { ApiResponse } from "./api";
 import { AuthResponse } from "./User";
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 export interface ElectronAPI {
   // User operations
