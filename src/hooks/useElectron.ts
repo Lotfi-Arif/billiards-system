@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ApiResponse } from "../shared/types/api";
-import { ElectronAPI } from "@/shared/types/electronAPI";
+import { ElectronAPI, ApiResponse } from "@/shared/types/electronAPI";
 
 type ElectronApiFunction<T> = (api: ElectronAPI) => Promise<ApiResponse<T>>;
 

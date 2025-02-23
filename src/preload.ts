@@ -1,4 +1,4 @@
-import { ApiResponse, ElectronAPI } from "@/shared/types/api";
+import { ApiResponse, ElectronAPI } from "@/shared/types/electronAPI";
 import { IpcChannels, TableOperations } from "@/shared/types/ipc";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -13,6 +13,12 @@ function createInvoke<K extends IpcChannels>(
 
 // Create the API object that will be exposed to the renderer
 const api: ElectronAPI = {
+  login: (credentials) => createInvoke(IpcChannels.AUTH_LOGIN)(credentials),
+
+  logout: () => createInvoke(IpcChannels.AUTH_LOGOUT)(),
+
+  getCurrentUser: () => createInvoke(IpcChannels.AUTH_GET_CURRENT_USER)(),
+  
   getTables: () => createInvoke(IpcChannels.TABLE_GET_ALL)(),
 
   getTableStatus: (tableId) =>
