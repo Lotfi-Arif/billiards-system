@@ -11,6 +11,7 @@
       "src/backend/**/*.ts",
       "src/main.ts",
       "src/preload.ts",
+      "src/config.ts",
       "src/shared/**/*.ts",
       "forge.config.ts"
     ],

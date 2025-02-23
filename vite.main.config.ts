@@ -11,15 +11,36 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": "/src",
-      "@shared": "/src/shared",
-      "@renderer": "/src/renderer",
-      "@backend": "/src/backend",
+      "@": path.resolve(__dirname, "./src"),
+      "@shared": path.resolve(__dirname, "./src/shared"),
+      "@backend": path.resolve(__dirname, "./src/backend"),
     },
   },
   build: {
-    rollupOptions: {
-      external: ["better-sqlite3", "electron", "electron-squirrel-startup"],
+    outDir: ".vite/build",
+    lib: {
+      entry: "src/main.ts",
+      formats: ["cjs"],
+      fileName: () => "[name].js",
     },
+    rollupOptions: {
+      external: [
+        "electron",
+        "ws",
+        "mqtt",
+        "serialport",
+        "@prisma/client",
+        "bcrypt",
+        "jsonwebtoken",
+      ],
+      output: {
+        entryFileNames: "[name].js",
+      },
+    },
+    // Prevent minification for better debugging
+    minify: process.env.NODE_ENV === "production",
+    sourcemap: process.env.NODE_ENV !== "production",
+    // Ensure Node.js environment
+    target: "node18",
   },
 });

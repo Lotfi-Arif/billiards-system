@@ -1,18 +1,19 @@
 import { create } from "zustand";
-import { User } from "@prisma/client";
+import { AuthResponse, UserDTO } from "@shared/types/User";
 
 interface AuthState {
-  currentUser: User | null;
+  token: string | null;
+  currentUser: UserDTO | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
 
-export const useAuth = create<AuthState>((set, get) => ({
+export const useAuth = create<AuthState>((set) => ({
+  token: null,
   currentUser: null,
   isAuthenticated: false,
   isLoading: true,
@@ -23,17 +24,23 @@ export const useAuth = create<AuthState>((set, get) => ({
       set({ isLoading: true, error: null });
       const response = await window.electron.login({ email, password });
 
-      if (!response.success) {
+      if (!response.success || !response.data) {
         throw new Error(response.error || "Login failed");
       }
 
+      const authResponse = response.data as AuthResponse;
+
       set({
-        currentUser: response.data,
+        token: authResponse.token,
+        currentUser: authResponse.user,
         isAuthenticated: true,
         isLoading: false,
+        error: null,
       });
     } catch (err) {
       set({
+        token: null,
+        currentUser: null,
         error: err instanceof Error ? err.message : String(err),
         isAuthenticated: false,
         isLoading: false,
@@ -44,8 +51,14 @@ export const useAuth = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       set({ isLoading: true });
-      await window.electron.logout();
+      const response = await window.electron.logout();
+
+      if (!response.success) {
+        throw new Error(response.error || "Logout failed");
+      }
+
       set({
+        token: null,
         currentUser: null,
         isAuthenticated: false,
         isLoading: false,
@@ -66,20 +79,26 @@ export const useAuth = create<AuthState>((set, get) => ({
 
       if (!response.success || !response.data) {
         set({
+          token: null,
           currentUser: null,
           isAuthenticated: false,
           isLoading: false,
+          error: null,
         });
         return;
       }
 
+      const userData = response.data as UserDTO;
+
       set({
-        currentUser: response.data,
+        currentUser: userData,
         isAuthenticated: true,
         isLoading: false,
+        error: null,
       });
     } catch (err) {
       set({
+        token: null,
         currentUser: null,
         isAuthenticated: false,
         error: err instanceof Error ? err.message : String(err),

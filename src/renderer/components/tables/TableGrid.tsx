@@ -3,7 +3,7 @@ import { TableStatus } from "@prisma/client";
 import TableCard from "./TableCard";
 import TableStatusBadge from "./TableStatusBadge";
 import { useElectron } from "@/hooks/useElectron";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/renderer/contexts/AuthContext";
 
 const TableGrid: React.FC = () => {
   const {

@@ -1,13 +1,13 @@
-import { create } from "zustand";
-import { TableStatus, SessionType } from "@prisma/client";
-import { TableWithSessions } from "../../shared/types/Table";
+import React, { createContext, useContext, useEffect } from 'react';
+import { TableStatus, SessionType } from '@prisma/client';
+import { useTableStore } from '../stores/tableStore';
+import { TableWithSessions } from '@shared/types/Table';
 
-interface TableState {
+// Type for the context value
+interface TableContextValue {
   tables: TableWithSessions[];
   isLoading: boolean;
   error: Error | null;
-
-  fetchTables: () => Promise<void>;
   openTable: (
     tableId: string,
     userId: string,
@@ -21,118 +21,87 @@ interface TableState {
     userId: string,
     status: TableStatus
   ) => Promise<void>;
+  refreshTables: () => Promise<void>;
 }
 
-export const useTableStore = create<TableState>((set, get) => ({
+// Create context with initial value
+const TableContext = createContext<TableContextValue>({
   tables: [],
   isLoading: false,
   error: null,
-
-  fetchTables: async () => {
-    try {
-      set({ isLoading: true });
-      const response = await window.electron.getTables();
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to fetch tables");
-      }
-
-      set({
-        tables: response.data || [],
-        isLoading: false,
-        error: null,
-      });
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err : new Error(String(err)),
-        isLoading: false,
-      });
-    }
+  openTable: async () => {
+    throw new Error('TableProvider not found');
   },
-
-  openTable: async (tableId, userId, sessionType, duration) => {
-    try {
-      set({ isLoading: true });
-      const response = await window.electron.openTable(
-        tableId,
-        userId,
-        sessionType,
-        duration
-      );
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to open table");
-      }
-
-      // Refresh tables after operation
-      await get().fetchTables();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err : new Error(String(err)),
-        isLoading: false,
-      });
-    }
+  closeTable: async () => {
+    throw new Error('TableProvider not found');
   },
-
-  closeTable: async (tableId, userId) => {
-    try {
-      set({ isLoading: true });
-      const response = await window.electron.closeTable(tableId, userId);
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to close table");
-      }
-
-      // Refresh tables after operation
-      await get().fetchTables();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err : new Error(String(err)),
-        isLoading: false,
-      });
-    }
+  setTableMaintenance: async () => {
+    throw new Error('TableProvider not found');
   },
-
-  setTableMaintenance: async (tableId, userId) => {
-    try {
-      set({ isLoading: true });
-      const response = await window.electron.setTableMaintenance(
-        tableId,
-        userId
-      );
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to set table maintenance");
-      }
-
-      // Refresh tables after operation
-      await get().fetchTables();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err : new Error(String(err)),
-        isLoading: false,
-      });
-    }
+  updateTableStatus: async () => {
+    throw new Error('TableProvider not found');
   },
-
-  updateTableStatus: async (tableId, userId, status) => {
-    try {
-      set({ isLoading: true });
-      const response = await window.electron.updateTable(tableId, userId, {
-        status,
-      });
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to update table status");
-      }
-
-      // Refresh tables after operation
-      await get().fetchTables();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err : new Error(String(err)),
-        isLoading: false,
-      });
-    }
+  refreshTables: async () => {
+    throw new Error('TableProvider not found');
   },
-}));
+});
+
+// Custom hook to use the table context
+export const useTable = () => {
+  const context = useContext(TableContext);
+  if (!context) {
+    throw new Error('useTable must be used within a TableProvider');
+  }
+  return context;
+};
+
+// Provider component
+export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ 
+  children 
+}) => {
+  const {
+    tables,
+    isLoading,
+    error,
+    fetchTables,
+    openTable,
+    closeTable,
+    setTableMaintenance,
+    updateTableStatus,
+  } = useTableStore();
+
+  // Fetch tables on mount and set up refresh interval
+  useEffect(() => {
+    // Initial fetch
+    fetchTables();
+
+    // Set up periodic refresh (every 30 seconds)
+    const intervalId = setInterval(() => {
+      fetchTables();
+    }, 30000);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [fetchTables]);
+
+  const value: TableContextValue = {
+    tables,
+    isLoading,
+    error,
+    openTable,
+    closeTable,
+    setTableMaintenance,
+    updateTableStatus,
+    refreshTables: fetchTables,
+  };
+
+  return (
+    <TableContext.Provider value={value}>
+      {children}
+    </TableContext.Provider>
+  );
+};
+
+export default TableContext;

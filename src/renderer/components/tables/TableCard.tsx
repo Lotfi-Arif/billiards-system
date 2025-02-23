@@ -1,6 +1,6 @@
 import React from "react";
 import { TableStatus } from "@prisma/client";
-import { TableWithSessions } from "../../../shared/types/Table";
+import { TableWithSessions } from "@shared/types/Table";
 
 interface TableCardProps {
   table: TableWithSessions;

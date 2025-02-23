@@ -1,4 +1,6 @@
-import { PoolTable, SessionType, TableStatus } from "@prisma/client";
+import { PoolTable, SessionType, TableStatus, Session } from "@prisma/client";
+import { TableWithSessions } from "@/shared/types/Table";
+import { AuthResponse, CurrentUserResponse } from "@/shared/types/User";
 
 export enum IpcChannels {
   TABLE_GET_ALL = "table:getAll",
@@ -16,21 +18,18 @@ export enum IpcChannels {
 export interface TableOperations {
   [IpcChannels.TABLE_GET_ALL]: {
     request: void;
-    response: PoolTable[];
+    response: TableWithSessions[];
   };
-
   [IpcChannels.TABLE_GET_STATUS]: {
     request: { tableId: string };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.TABLE_CREATE]: {
     request: {
       number: number;
     };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.TABLE_OPEN]: {
     request: {
       tableId: string;
@@ -38,17 +37,15 @@ export interface TableOperations {
       sessionType: SessionType;
       duration?: number;
     };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.TABLE_CLOSE]: {
     request: {
       tableId: string;
       userId: string;
     };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.TABLE_UPDATE]: {
     request: {
       tableId: string;
@@ -58,32 +55,28 @@ export interface TableOperations {
         isLightOn?: boolean;
       };
     };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.TABLE_MAINTENANCE]: {
     request: {
       tableId: string;
       userId: string;
     };
-    response: PoolTable;
+    response: TableWithSessions;
   };
-
   [IpcChannels.AUTH_LOGIN]: {
     request: {
       email: string;
       password: string;
     };
-    response: any;
+    response: AuthResponse;
   };
-
   [IpcChannels.AUTH_LOGOUT]: {
     request: void;
     response: void;
   };
-
   [IpcChannels.AUTH_GET_CURRENT_USER]: {
     request: void;
-    response: any;
+    response: CurrentUserResponse;
   };
 }
