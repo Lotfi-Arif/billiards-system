@@ -1,18 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { TableStatus } from "@prisma/client";
 import TableCard from "./TableCard";
 import TableStatusBadge from "./TableStatusBadge";
-import { useElectron } from "@/renderer/hooks/useElectron";
+import { useTables } from "@/renderer/contexts/TableContext";
 import { useAuth } from "@/renderer/contexts/AuthContext";
 
 const TableGrid: React.FC = () => {
-  const {
-    data: tables,
-    isLoading,
-    error,
-    refetch,
-  } = useElectron((api) => api.getTables());
-
+  const { tables, isLoading, error, refreshTables } = useTables();
   const { currentUser } = useAuth();
 
   const handleTableAction = async (
@@ -20,6 +14,7 @@ const TableGrid: React.FC = () => {
     action: "open" | "close" | "reserve" | "maintenance"
   ) => {
     if (!currentUser) return;
+
     try {
       switch (action) {
         case "open":
@@ -35,24 +30,13 @@ const TableGrid: React.FC = () => {
           await window.electron.setTableMaintenance(tableId, currentUser.id);
           break;
       }
-      // Refetch tables after action
-      await refetch();
+      await refreshTables();
     } catch (error) {
       console.error(`Error handling table action: ${action}`, error);
-      // Here you might want to show an error toast or notification
     }
   };
 
-  const getStatusCounts = (): Record<TableStatus, number> => {
-    if (!tables)
-      return {
-        AVAILABLE: 0,
-        IN_USE: 0,
-        RESERVED: 0,
-        MAINTENANCE: 0,
-        PRAYER_TIME: 0,
-      };
-
+  const statusCounts = useMemo(() => {
     return tables.reduce<Record<TableStatus, number>>(
       (acc, table) => {
         acc[table.status] = (acc[table.status] || 0) + 1;
@@ -66,7 +50,7 @@ const TableGrid: React.FC = () => {
         PRAYER_TIME: 0,
       }
     );
-  };
+  }, [tables]);
 
   if (isLoading) {
     return (
@@ -91,24 +75,23 @@ const TableGrid: React.FC = () => {
     );
   }
 
-  const statusCounts = getStatusCounts();
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Pool Tables</h2>
         <div className="flex space-x-2">
-          {Object.values(TableStatus).map((status) => (
+          {Object.entries(statusCounts).map(([status, count]) => (
             <TableStatusBadge
               key={status}
-              status={status}
-              count={statusCounts[status]}
+              status={status as TableStatus}
+              count={count}
             />
           ))}
         </div>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {tables?.map((table) => (
+        {tables.map((table) => (
           <TableCard
             key={table.id}
             table={table}

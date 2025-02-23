@@ -1,11 +1,11 @@
 import { PrismaClient } from "@prisma/client";
-import { WebSocket, Server } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 
 export class BaseService {
   protected prisma: PrismaClient;
-  protected wss?: Server;
+  protected wss?: WebSocketServer;
 
-  constructor(prisma: PrismaClient, wss?: Server) {
+  constructor(prisma: PrismaClient, wss?: WebSocketServer) {
     this.prisma = prisma;
     this.wss = wss;
   }

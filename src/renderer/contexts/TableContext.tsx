@@ -1,81 +1,81 @@
-import React, { createContext, useContext, useEffect } from "react";
-import { TableStatus, SessionType } from "@prisma/client";
-import { useTableStore } from "../stores/tableStore";
-import { TableWithSessions } from "@shared/types/Table";
-import { useWebSocket } from "@renderer/hooks/useWebSocket";
+// src/renderer/contexts/TableContext.tsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { TableWithSessions } from '@/shared/types/Table';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { WebSocketEvents } from '@/shared/types/websocket';
+import { useElectron } from '../hooks/useElectron';
 
-interface TableContextValue {
+interface TableContextType {
   tables: TableWithSessions[];
   isLoading: boolean;
   error: Error | null;
-  openTable: (
-    tableId: string,
-    userId: string,
-    sessionType: SessionType,
-    duration?: number
-  ) => Promise<void>;
-  closeTable: (tableId: string, userId: string) => Promise<void>;
-  setTableMaintenance: (tableId: string, userId: string) => Promise<void>;
-  updateTableStatus: (
-    tableId: string,
-    userId: string,
-    status: TableStatus
-  ) => Promise<void>;
   refreshTables: () => Promise<void>;
 }
 
-const TableContext = createContext<TableContextValue | null>(null);
+const TableContext = createContext<TableContextType | undefined>(undefined);
 
-export const useTable = () => {
-  const context = useContext(TableContext);
-  if (!context) {
-    throw new Error("useTable must be used within a TableProvider");
-  }
-  return context;
-};
+export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [tables, setTables] = useState<TableWithSessions[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-export const TableProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const {
-    tables,
-    isLoading,
-    error,
-    fetchTables,
-    openTable,
-    closeTable,
-    setTableMaintenance,
-    updateTableStatus,
-  } = useTableStore();
+  const { subscribe } = useWebSocket(
+    (message) => message.event === WebSocketEvents.TABLE_UPDATED
+  );
+  const electron = window.electron;
 
-  // Set up WebSocket listeners for real-time updates
-  useWebSocket((message) => {
-    if (
-      message.event === "TABLE_UPDATED" ||
-      message.event === "SESSION_UPDATED" ||
-      message.event === "RESERVATION_UPDATED"
-    ) {
-      fetchTables();
+  const fetchTables = async () => {
+    try {
+      setIsLoading(true);
+      const response = await electron.getTables();
+      if (response.success && response.data) {
+        setTables(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to fetch tables');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+    } finally {
+      setIsLoading(false);
     }
-  });
+  };
 
-  // Initial fetch
   useEffect(() => {
     fetchTables();
-  }, [fetchTables]);
 
-  const value: TableContextValue = {
+    const unsubscribe = subscribe((message) => {
+      if (message.event === WebSocketEvents.TABLE_UPDATED) {
+        setTables(current => 
+          current.map(table => 
+            table.id === message.data.id ? message.data : table
+          )
+        );
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const value = {
     tables,
     isLoading,
     error,
-    openTable,
-    closeTable,
-    setTableMaintenance,
-    updateTableStatus,
     refreshTables: fetchTables,
   };
 
   return (
-    <TableContext.Provider value={value}>{children}</TableContext.Provider>
+    <TableContext.Provider value={value}>
+      {children}
+    </TableContext.Provider>
   );
+};
+
+export const useTables = () => {
+  const context = useContext(TableContext);
+  if (context === undefined) {
+    throw new Error('useTables must be used within a TableProvider');
+  }
+  return context;
 };

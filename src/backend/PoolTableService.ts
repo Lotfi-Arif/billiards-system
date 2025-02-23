@@ -6,9 +6,10 @@ import {
 } from "@prisma/client";
 import { BaseService } from "./BaseService";
 import { CreateTableDTO, UpdateTableDTO } from "@/shared/types/Table";
+import { WebSocketServer } from "ws";
 
 export class PoolTableService extends BaseService {
-  constructor(prisma: PrismaClient) {
+  constructor(prisma: PrismaClient, wss?: WebSocketServer) {
     super(prisma);
   }
 

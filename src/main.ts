@@ -8,6 +8,8 @@ import { ArduinoControlService } from "./backend/ArduinoControlService";
 import { WebSocketServer } from "ws";
 import { config } from "./config";
 import { setupAuthHandlers, setupTableHandlers } from "./ipc/handlers";
+import { WebSocketEvents } from "./shared/types/websocket";
+import { TableWebSocketServer } from "@backend/TableWebSocketServer";
 
 interface CurrentUserState {
   userId: string | null;
@@ -19,8 +21,11 @@ const userState: CurrentUserState = {
   token: null,
 };
 
+// Initialize WebSocket server with enhanced functionality
+const wsServer = new TableWebSocketServer(config.ws.port);
+const wss = wsServer.getServer();
+
 // Initialize services
-const wss = new WebSocketServer({ port: config.ws.port });
 const prisma = new PrismaClient();
 const arduinoService = new ArduinoControlService(
   prisma,
@@ -28,7 +33,7 @@ const arduinoService = new ArduinoControlService(
   config.mqtt.broker
 );
 const userService = new UserService(prisma);
-const tableService = new PoolTableService(prisma);
+const tableService = new PoolTableService(prisma, wss);
 
 if (started) {
   app.quit();
@@ -58,6 +63,8 @@ const createWindow = () => {
   if (process.env.NODE_ENV === "development") {
     mainWindow.webContents.openDevTools();
   }
+
+  return mainWindow;
 };
 
 // IPC Handlers
@@ -76,20 +83,70 @@ async function cleanup() {
     }
   }
   await arduinoService.disconnect();
-  wss.close();
+  wsServer.close();
   await prisma.$disconnect();
+}
+
+// Enhanced WebSocket message handling
+wss.on("connection", (ws) => {
+  console.log("Client connected to WebSocket");
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log("Received WebSocket message:", data);
+      
+      // Handle different message types
+      switch (data.type) {
+        case "TABLE_UPDATE":
+          broadcastUpdate(WebSocketEvents.TABLE_UPDATED, data.payload);
+          break;
+        case "SESSION_UPDATE":
+          broadcastUpdate(WebSocketEvents.SESSION_UPDATED, data.payload);
+          break;
+        case "PRAYER_TIME_UPDATE":
+          broadcastUpdate(WebSocketEvents.PRAYER_TIME_UPDATED, data.payload);
+          break;
+        default:
+          console.log("Unhandled message type:", data.type);
+      }
+    } catch (error) {
+      console.error("Invalid message format:", error);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket client error:", error);
+  });
+
+  ws.on("close", () => {
+    console.log("Client disconnected from WebSocket");
+  });
+});
+
+// Function to broadcast updates
+function broadcastUpdate(event: WebSocketEvents, data: any) {
+  const message = JSON.stringify({ event, data });
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
 }
 
 // Handle app lifecycle
 app.whenReady().then(() => {
+  const mainWindow = createWindow();
   setupIpcHandlers();
-  createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+
+  // Log successful startup
+  console.log(`Application started successfully. WebSocket server running on port ${config.ws.port}`);
 });
 
 // Handle app shutdown
@@ -113,3 +170,6 @@ process.on("unhandledRejection", async (reason, promise) => {
   await cleanup();
   app.quit();
 });
+
+// Export necessary items for testing
+export { broadcastUpdate, cleanup };

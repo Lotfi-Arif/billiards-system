@@ -1,16 +1,23 @@
-import { useContext, useEffect } from 'react';
-import { WebSocketContext } from '../contexts/WebSocketContext';
-import { WebSocketMessage } from '@shared/types/websocket';
+import { useContext, useEffect } from "react";
+import {
+  WebSocketContext,
+  WebSocketContextType,
+} from "@renderer/contexts/WebSocketContext";
+import { WebSocketMessage } from "@/shared/types/websocket";
 
-export const useWebSocket = (onMessage: (message: WebSocketMessage) => void) => {
+export const useWebSocket = (
+  onMessage?: (message: WebSocketMessage) => void
+): WebSocketContextType => {
   const context = useContext(WebSocketContext);
-  
+
   if (!context) {
-    throw new Error('useWebSocket must be used within a WebSocketProvider');
+    throw new Error("useWebSocket must be used within a WebSocketProvider");
   }
 
   useEffect(() => {
-    return context.subscribe(onMessage);
+    if (onMessage) {
+      return context.subscribe(onMessage);
+    }
   }, [context, onMessage]);
 
   return context;
