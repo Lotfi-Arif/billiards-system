@@ -5,7 +5,7 @@ import { TableWithSessions } from "@shared/types/Table";
 interface TableCardProps {
   table: TableWithSessions;
   onAction?: (action: "open" | "close" | "reserve" | "maintenance") => void;
-  currentUser?: { id: string; role: string };
+  currentUser: { id: string; role: string } | null;
 }
 
 const TableCard: React.FC<TableCardProps> = ({

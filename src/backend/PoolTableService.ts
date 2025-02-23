@@ -1,246 +1,280 @@
-import { PrismaClient, PoolTable, TableStatus } from "@prisma/client";
+import {
+  PrismaClient,
+  TableStatus,
+  SessionType,
+  SessionStatus,
+} from "@prisma/client";
 import { BaseService } from "./BaseService";
-import { ArduinoControlService } from "./ArduinoControlService";
 import { CreateTableDTO, UpdateTableDTO } from "@/shared/types/Table";
 
 export class PoolTableService extends BaseService {
-  private arduinoService: ArduinoControlService;
-
-  constructor(prisma: PrismaClient, arduinoService: ArduinoControlService) {
+  constructor(prisma: PrismaClient) {
     super(prisma);
-    this.arduinoService = arduinoService;
   }
 
-  async createTable(data: CreateTableDTO): Promise<PoolTable> {
-    const existingTable = await this.prisma.poolTable.findUnique({
-      where: { number: data.number },
+  async getAllTables() {
+    return this.prisma.poolTable.findMany({
+      include: {
+        sessions: {
+          where: {
+            OR: [
+              { status: SessionStatus.ACTIVE },
+              {
+                AND: [
+                  { status: SessionStatus.COMPLETED },
+                  {
+                    endTime: {
+                      gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
     });
+  }
 
-    if (existingTable) {
-      throw new Error(`Table number ${data.number} already exists`);
-    }
+  async getTableStatus(tableId: string) {
+    return this.prisma.poolTable.findUnique({
+      where: { id: tableId },
+      include: {
+        sessions: {
+          where: { status: SessionStatus.ACTIVE },
+        },
+      },
+    });
+  }
 
-    return this.prisma.poolTable.create({
+  async createTable(data: CreateTableDTO) {
+    const table = await this.prisma.poolTable.create({
       data: {
         number: data.number,
         status: TableStatus.AVAILABLE,
-        isLightOn: false,
+      },
+      include: {
+        sessions: true,
       },
     });
+
+    this.broadcastEvent("TABLE_CREATED", table);
+    return table;
   }
 
   async openTable(
     tableId: string,
     userId: string,
-    sessionType: "TIMED" | "OPEN",
+    sessionType: SessionType,
     duration?: number
-  ): Promise<PoolTable> {
-    const table = await this.prisma.poolTable.findUnique({
-      where: { id: tableId },
-    });
+  ) {
+    // Start a transaction
+    return this.prisma.$transaction(async (tx) => {
+      // Update table status
+      const table = await tx.poolTable.update({
+        where: { id: tableId },
+        data: { status: TableStatus.IN_USE },
+        include: { sessions: true },
+      });
 
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    if (table.status !== TableStatus.AVAILABLE) {
-      throw new Error("Table is not available");
-    }
-
-    // Start a new session
-    await this.prisma.session.create({
-      data: {
-        tableId,
-        userId,
-        type: sessionType,
-        duration,
-        status: "ACTIVE",
-      },
-    });
-
-    // Update table status and turn on light
-    const updatedTable = await this.prisma.poolTable.update({
-      where: { id: tableId },
-      data: {
-        status: TableStatus.IN_USE,
-        isLightOn: true,
-      },
-    });
-
-    // Use Arduino service to control physical table
-    await this.arduinoService.setTableLight(table.number, true);
-
-    await this.logActivity(
-      userId,
-      "TABLE_OPENED",
-      `Table ${table.number} opened for ${sessionType} session`
-    );
-
-    return updatedTable;
-  }
-
-  async closeTable(tableId: string, userId: string): Promise<PoolTable> {
-    const table = await this.prisma.poolTable.findUnique({
-      where: { id: tableId },
-      include: {
-        sessions: {
-          where: { status: "ACTIVE" },
-        },
-      },
-    });
-
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    if (table.status !== TableStatus.IN_USE) {
-      throw new Error("Table is not in use");
-    }
-
-    // Close active session
-    if (table.sessions[0]) {
-      await this.prisma.session.update({
-        where: { id: table.sessions[0].id },
+      // Create new session
+      const session = await tx.session.create({
         data: {
-          status: "COMPLETED",
-          endTime: new Date(),
+          tableId,
+          userId,
+          type: sessionType,
+          duration,
+          status: SessionStatus.ACTIVE,
         },
       });
-    }
 
-    // Update table status and turn off light
-    const updatedTable = await this.prisma.poolTable.update({
-      where: { id: tableId },
-      data: {
-        status: TableStatus.AVAILABLE,
-        isLightOn: false,
-      },
+      await this.logActivity(
+        userId,
+        "TABLE_OPENED",
+        `Table ${table.number} opened`
+      );
+      this.broadcastEvent("TABLE_UPDATED", table);
+
+      return table;
     });
-
-    // Use Arduino service to control physical table
-    await this.arduinoService.setTableLight(table.number, false);
-
-    await this.logActivity(
-      userId,
-      "TABLE_CLOSED",
-      `Table ${table.number} closed`
-    );
-
-    return updatedTable;
   }
 
-  async updateTable(
-    tableId: string,
-    userId: string,
-    data: UpdateTableDTO
-  ): Promise<PoolTable> {
-    const table = await this.prisma.poolTable.findUnique({
-      where: { id: tableId },
-    });
-
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    // If we're changing status to IN_USE, check if there's an active session
-    if (data.status === TableStatus.IN_USE) {
-      const activeSession = await this.prisma.session.findFirst({
+  async closeTable(tableId: string, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // Find active session
+      const activeSession = await tx.session.findFirst({
         where: {
           tableId,
-          status: "ACTIVE",
+          status: SessionStatus.ACTIVE,
         },
       });
 
       if (!activeSession) {
-        throw new Error("Cannot set table to IN_USE without an active session");
+        throw new Error("No active session found for this table");
       }
-    }
 
-    const updatedTable = await this.prisma.poolTable.update({
+      // Calculate cost based on duration
+      const duration = Math.ceil(
+        (Date.now() - activeSession.startTime.getTime()) / (1000 * 60)
+      );
+      const cost = this.calculateSessionCost(duration, activeSession.type);
+
+      // Update session
+      await tx.session.update({
+        where: { id: activeSession.id },
+        data: {
+          endTime: new Date(),
+          status: SessionStatus.COMPLETED,
+          cost,
+        },
+      });
+
+      // Update table status
+      const table = await tx.poolTable.update({
+        where: { id: tableId },
+        data: { status: TableStatus.AVAILABLE },
+        include: { sessions: true },
+      });
+
+      await this.logActivity(
+        userId,
+        "TABLE_CLOSED",
+        `Table ${table.number} closed`
+      );
+      this.broadcastEvent("TABLE_UPDATED", table);
+
+      return table;
+    });
+  }
+
+  async updateTable(tableId: string, userId: string, data: UpdateTableDTO) {
+    const table = await this.prisma.poolTable.update({
       where: { id: tableId },
       data,
+      include: { sessions: true },
     });
-
-    // If status is changing, handle light control
-    if (data.status && data.status !== table.status) {
-      const shouldLightBeOn = data.status === TableStatus.IN_USE;
-      await this.arduinoService.setTableLight(table.number, shouldLightBeOn);
-    }
 
     await this.logActivity(
       userId,
       "TABLE_UPDATED",
-      `Table ${table.number} updated: ${JSON.stringify(data)}`
+      `Table ${table.number} updated`
     );
+    this.broadcastEvent("TABLE_UPDATED", table);
 
-    return updatedTable;
+    return table;
   }
 
-  async setTableMaintenance(
-    tableId: string,
-    userId: string
-  ): Promise<PoolTable> {
-    const table = await this.prisma.poolTable.findUnique({
+  async setTableMaintenance(tableId: string, userId: string) {
+    const table = await this.prisma.poolTable.update({
       where: { id: tableId },
+      data: { status: TableStatus.MAINTENANCE },
+      include: { sessions: true },
     });
-
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    const updatedTable = await this.prisma.poolTable.update({
-      where: { id: tableId },
-      data: {
-        status: TableStatus.MAINTENANCE,
-        isLightOn: false,
-      },
-    });
-
-    // Use Arduino service to control physical table
-    await this.arduinoService.setTableLight(table.number, false);
 
     await this.logActivity(
       userId,
       "TABLE_MAINTENANCE",
       `Table ${table.number} set to maintenance`
     );
+    this.broadcastEvent("TABLE_UPDATED", table);
 
-    return updatedTable;
+    return table;
   }
 
-  async getAllTables(): Promise<PoolTable[]> {
-    return this.prisma.poolTable.findMany({
+  async getActiveSessions() {
+    return this.prisma.session.findMany({
+      where: {
+        status: SessionStatus.ACTIVE,
+      },
       include: {
-        sessions: {
-          where: { status: "ACTIVE" },
-        },
-        reservations: {
-          where: {
-            status: "CONFIRMED",
-            startTime: {
-              gte: new Date(),
-            },
+        table: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
       },
-      orderBy: { number: "asc" },
     });
   }
 
-  async getTableStatus(tableId: string): Promise<PoolTable> {
-    const table = await this.prisma.poolTable.findUnique({
-      where: { id: tableId },
+  async getTableSessions(tableId: string) {
+    return this.prisma.session.findMany({
+      where: {
+        tableId,
+        OR: [
+          { status: SessionStatus.ACTIVE },
+          {
+            AND: [
+              { status: SessionStatus.COMPLETED },
+              { endTime: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+            ],
+          },
+        ],
+      },
       include: {
-        sessions: {
-          where: { status: "ACTIVE" },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
     });
+  }
 
-    if (!table) {
-      throw new Error("Table not found");
+  async reserveTable(tableId: string, userId: string, duration: number) {
+    return this.prisma.$transaction(async (tx) => {
+      // Check if table is available
+      const table = await tx.poolTable.findUnique({
+        where: { id: tableId },
+      });
+
+      if (!table || table.status !== TableStatus.AVAILABLE) {
+        throw new Error("Table is not available for reservation");
+      }
+
+      // Create reservation
+      await tx.reservation.create({
+        data: {
+          tableId,
+          userId,
+          duration,
+          startTime: new Date(),
+          status: "CONFIRMED",
+        },
+      });
+
+      // Update table status
+      const updatedTable = await tx.poolTable.update({
+        where: { id: tableId },
+        data: { status: TableStatus.RESERVED },
+        include: { sessions: true },
+      });
+
+      await this.logActivity(
+        userId,
+        "TABLE_RESERVED",
+        `Table ${table.number} reserved`
+      );
+      this.broadcastEvent("TABLE_UPDATED", updatedTable);
+
+      return updatedTable;
+    });
+  }
+
+  private calculateSessionCost(duration: number, type: SessionType): number {
+    // Implement your cost calculation logic here
+    const HOURLY_RATE = 30; // $30 per hour
+    const MINUTE_RATE = HOURLY_RATE / 60;
+
+    if (type === SessionType.TIMED) {
+      return Math.ceil(duration * MINUTE_RATE);
+    } else {
+      // For open sessions, maybe apply a different rate or minimum
+      return Math.max(Math.ceil(duration * MINUTE_RATE), HOURLY_RATE);
     }
-
-    return table;
   }
 }

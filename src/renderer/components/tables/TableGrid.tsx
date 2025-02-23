@@ -10,7 +10,9 @@ const TableGrid: React.FC = () => {
     data: tables,
     isLoading,
     error,
+    refetch,
   } = useElectron((api) => api.getTables());
+
   const { currentUser } = useAuth();
 
   const handleTableAction = async (
@@ -27,12 +29,18 @@ const TableGrid: React.FC = () => {
         case "close":
           await window.electron.closeTable(tableId, currentUser.id);
           break;
+        case "reserve":
+          await window.electron.reserveTable(tableId, currentUser.id, 60);
+          break;
         case "maintenance":
           await window.electron.setTableMaintenance(tableId, currentUser.id);
           break;
       }
+      // Refetch tables after action
+      await refetch();
     } catch (error) {
       console.error(`Error handling table action: ${action}`, error);
+      // Here you might want to show an error toast or notification
     }
   };
 
@@ -57,7 +65,10 @@ const TableGrid: React.FC = () => {
       <div className="rounded-md bg-red-50 p-4 my-4">
         <div className="flex">
           <div className="ml-3">
-            <p className="text-sm text-red-700">{error.message}</p>
+            <h3 className="text-sm font-medium text-red-800">
+              Error loading tables
+            </h3>
+            <p className="text-sm text-red-700 mt-2">{error.message}</p>
           </div>
         </div>
       </div>

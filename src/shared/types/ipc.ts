@@ -3,6 +3,7 @@ import { TableWithSessions } from "@/shared/types/Table";
 import { AuthResponse, CurrentUserResponse } from "@/shared/types/User";
 
 export enum IpcChannels {
+  // table
   TABLE_GET_ALL = "table:getAll",
   TABLE_GET_STATUS = "table:getStatus",
   TABLE_CREATE = "table:create",
@@ -10,9 +11,16 @@ export enum IpcChannels {
   TABLE_CLOSE = "table:close",
   TABLE_UPDATE = "table:update",
   TABLE_MAINTENANCE = "table:maintenance",
+  TABLE_RESERVE = "table:reserve",
+
+  // auth 
   AUTH_LOGIN = "auth:login",
   AUTH_LOGOUT = "auth:logout",
   AUTH_GET_CURRENT_USER = "auth:getCurrentUser",
+
+  // Session operations
+  SESSION_GET_ACTIVE = "session:getActive",
+  SESSION_GET_BY_TABLE = "session:getByTable",
 }
 
 export interface TableOperations {
@@ -63,6 +71,18 @@ export interface TableOperations {
       userId: string;
     };
     response: TableWithSessions;
+  };
+  [IpcChannels.TABLE_RESERVE]: {
+    request: { tableId: string; userId: string; duration: number };
+    response: TableWithSessions;
+  };
+  [IpcChannels.SESSION_GET_ACTIVE]: {
+    request: void;
+    response: Session[];
+  };
+  [IpcChannels.SESSION_GET_BY_TABLE]: {
+    request: { tableId: string };
+    response: Session[];
   };
   [IpcChannels.AUTH_LOGIN]: {
     request: {

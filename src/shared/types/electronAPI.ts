@@ -1,4 +1,4 @@
-import { PoolTable, TableStatus, SessionType } from "@prisma/client";
+import { TableStatus, SessionType, Session } from "@prisma/client";
 import { TableWithSessions } from "./Table";
 import { AuthResponse, CurrentUserResponse } from "./User";
 
@@ -39,5 +39,16 @@ export interface ElectronAPI {
   setTableMaintenance(
     tableId: string,
     userId: string
+  ): Promise<ApiResponse<TableWithSessions>>;
+
+  // Session operations
+  getActiveSessions(): Promise<ApiResponse<Session[]>>;
+  getTableSessions(tableId: string): Promise<ApiResponse<Session[]>>;
+
+  // Reservation operations
+  reserveTable(
+    tableId: string,
+    userId: string,
+    duration: number
   ): Promise<ApiResponse<TableWithSessions>>;
 }

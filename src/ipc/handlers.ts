@@ -1,5 +1,5 @@
 import { PoolTableService } from "@/backend/PoolTableService";
-import { ApiResponse } from "@/shared/types/api";
+import { ApiResponse } from "@/shared/types/electronAPI";
 import { IpcChannels, TableOperations } from "@/shared/types/ipc";
 import { ipcMain } from "electron";
 
@@ -27,22 +27,19 @@ function createHandler<K extends IpcChannels>(
 }
 
 export function setupTableHandlers(tableService: PoolTableService) {
-  // Get all tables
+  // Table operations
   createHandler(IpcChannels.TABLE_GET_ALL, async () => {
     return tableService.getAllTables();
   });
 
-  // Get table status
   createHandler(IpcChannels.TABLE_GET_STATUS, async ({ tableId }) => {
     return tableService.getTableStatus(tableId);
   });
 
-  // Create table
   createHandler(IpcChannels.TABLE_CREATE, async ({ number }) => {
     return tableService.createTable({ number });
   });
 
-  // Open table
   createHandler(
     IpcChannels.TABLE_OPEN,
     async ({ tableId, userId, sessionType, duration }) => {
@@ -50,18 +47,31 @@ export function setupTableHandlers(tableService: PoolTableService) {
     }
   );
 
-  // Close table
   createHandler(IpcChannels.TABLE_CLOSE, async ({ tableId, userId }) => {
     return tableService.closeTable(tableId, userId);
   });
 
-  // Update table
   createHandler(IpcChannels.TABLE_UPDATE, async ({ tableId, userId, data }) => {
     return tableService.updateTable(tableId, userId, data);
   });
 
-  // Set table maintenance
   createHandler(IpcChannels.TABLE_MAINTENANCE, async ({ tableId, userId }) => {
     return tableService.setTableMaintenance(tableId, userId);
+  });
+
+  createHandler(
+    IpcChannels.TABLE_RESERVE,
+    async ({ tableId, userId, duration }) => {
+      return tableService.reserveTable(tableId, userId, duration);
+    }
+  );
+
+  // Session operations
+  createHandler(IpcChannels.SESSION_GET_ACTIVE, async () => {
+    return tableService.getActiveSessions();
+  });
+
+  createHandler(IpcChannels.SESSION_GET_BY_TABLE, async ({ tableId }) => {
+    return tableService.getTableSessions(tableId);
   });
 }
