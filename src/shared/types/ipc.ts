@@ -12,12 +12,10 @@ export enum IpcChannels {
   TABLE_UPDATE = "table:update",
   TABLE_MAINTENANCE = "table:maintenance",
   TABLE_RESERVE = "table:reserve",
-
-  // auth 
+  // auth
   AUTH_LOGIN = "auth:login",
   AUTH_LOGOUT = "auth:logout",
   AUTH_GET_CURRENT_USER = "auth:getCurrentUser",
-
   // Session operations
   SESSION_GET_ACTIVE = "session:getActive",
   SESSION_GET_BY_TABLE = "session:getByTable",
@@ -33,9 +31,7 @@ export interface TableOperations {
     response: TableWithSessions;
   };
   [IpcChannels.TABLE_CREATE]: {
-    request: {
-      number: number;
-    };
+    request: { number: number };
     response: TableWithSessions;
   };
   [IpcChannels.TABLE_OPEN]: {
@@ -92,11 +88,11 @@ export interface TableOperations {
     response: AuthResponse;
   };
   [IpcChannels.AUTH_LOGOUT]: {
-    request: void;
+    request: { userId: string };
     response: void;
   };
   [IpcChannels.AUTH_GET_CURRENT_USER]: {
-    request: void;
+    request: { userId: string };
     response: CurrentUserResponse;
   };
 }

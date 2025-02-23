@@ -1,6 +1,20 @@
-import { TableStatus, SessionType, Session } from "@prisma/client";
+import { TableStatus, SessionType, SessionStatus } from "@prisma/client";
 import { TableWithSessions } from "./Table";
 import { AuthResponse, CurrentUserResponse } from "./User";
+
+export interface SessionData {
+  id: string;
+  status: SessionStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  tableId: string;
+  userId: string;
+  startTime: Date;
+  endTime: Date | null;
+  type: SessionType;
+  duration: number | null;
+  cost: number | null;
+}
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -14,8 +28,8 @@ export interface ElectronAPI {
     email: string;
     password: string;
   }): Promise<ApiResponse<AuthResponse>>;
-  logout(): Promise<ApiResponse<void>>;
-  getCurrentUser(): Promise<ApiResponse<CurrentUserResponse>>;
+  logout(userId: string): Promise<ApiResponse<void>>;
+  getCurrentUser(userId: string): Promise<ApiResponse<CurrentUserResponse>>;
 
   // Table operations
   getTables(): Promise<ApiResponse<TableWithSessions[]>>;
@@ -42,8 +56,8 @@ export interface ElectronAPI {
   ): Promise<ApiResponse<TableWithSessions>>;
 
   // Session operations
-  getActiveSessions(): Promise<ApiResponse<Session[]>>;
-  getTableSessions(tableId: string): Promise<ApiResponse<Session[]>>;
+  getActiveSessions(): Promise<ApiResponse<SessionData[]>>;
+  getTableSessions(tableId: string): Promise<ApiResponse<SessionData[]>>;
 
   // Reservation operations
   reserveTable(
@@ -51,4 +65,8 @@ export interface ElectronAPI {
     userId: string,
     duration: number
   ): Promise<ApiResponse<TableWithSessions>>;
+
+  // WebSocket events
+  onTableUpdate(callback: (data: TableWithSessions) => void): () => void;
+  onSessionUpdate(callback: (data: SessionData) => void): () => void;
 }

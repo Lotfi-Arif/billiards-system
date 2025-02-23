@@ -1,6 +1,6 @@
 import React from "react";
 import TableGrid from "./tables/TableGrid";
-import { useElectron } from "@/hooks/useElectron";
+import { useElectron } from "@/renderer/hooks/useElectron";
 import { SessionStatus, TableStatus } from "@prisma/client";
 
 const Dashboard: React.FC = () => {

@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect } from 'react';
-import { TableStatus, SessionType } from '@prisma/client';
-import { useTableStore } from '../stores/tableStore';
-import { TableWithSessions } from '@shared/types/Table';
+import React, { createContext, useContext, useEffect } from "react";
+import { TableStatus, SessionType } from "@prisma/client";
+import { useTableStore } from "../stores/tableStore";
+import { TableWithSessions } from "@shared/types/Table";
+import { useWebSocket } from "@renderer/hooks/useWebSocket";
 
-// Type for the context value
 interface TableContextValue {
   tables: TableWithSessions[];
   isLoading: boolean;
@@ -24,40 +24,18 @@ interface TableContextValue {
   refreshTables: () => Promise<void>;
 }
 
-// Create context with initial value
-const TableContext = createContext<TableContextValue>({
-  tables: [],
-  isLoading: false,
-  error: null,
-  openTable: async () => {
-    throw new Error('TableProvider not found');
-  },
-  closeTable: async () => {
-    throw new Error('TableProvider not found');
-  },
-  setTableMaintenance: async () => {
-    throw new Error('TableProvider not found');
-  },
-  updateTableStatus: async () => {
-    throw new Error('TableProvider not found');
-  },
-  refreshTables: async () => {
-    throw new Error('TableProvider not found');
-  },
-});
+const TableContext = createContext<TableContextValue | null>(null);
 
-// Custom hook to use the table context
 export const useTable = () => {
   const context = useContext(TableContext);
   if (!context) {
-    throw new Error('useTable must be used within a TableProvider');
+    throw new Error("useTable must be used within a TableProvider");
   }
   return context;
 };
 
-// Provider component
-export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ 
-  children 
+export const TableProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
 }) => {
   const {
     tables,
@@ -70,20 +48,20 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({
     updateTableStatus,
   } = useTableStore();
 
-  // Fetch tables on mount and set up refresh interval
-  useEffect(() => {
-    // Initial fetch
-    fetchTables();
-
-    // Set up periodic refresh (every 30 seconds)
-    const intervalId = setInterval(() => {
+  // Set up WebSocket listeners for real-time updates
+  useWebSocket((message) => {
+    if (
+      message.event === "TABLE_UPDATED" ||
+      message.event === "SESSION_UPDATED" ||
+      message.event === "RESERVATION_UPDATED"
+    ) {
       fetchTables();
-    }, 30000);
+    }
+  });
 
-    // Cleanup on unmount
-    return () => {
-      clearInterval(intervalId);
-    };
+  // Initial fetch
+  useEffect(() => {
+    fetchTables();
   }, [fetchTables]);
 
   const value: TableContextValue = {
@@ -98,10 +76,6 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   return (
-    <TableContext.Provider value={value}>
-      {children}
-    </TableContext.Provider>
+    <TableContext.Provider value={value}>{children}</TableContext.Provider>
   );
 };
-
-export default TableContext;

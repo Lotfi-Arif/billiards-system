@@ -2,7 +2,7 @@ import React from "react";
 import { TableStatus } from "@prisma/client";
 import TableCard from "./TableCard";
 import TableStatusBadge from "./TableStatusBadge";
-import { useElectron } from "@/hooks/useElectron";
+import { useElectron } from "@/renderer/hooks/useElectron";
 import { useAuth } from "@/renderer/contexts/AuthContext";
 
 const TableGrid: React.FC = () => {
@@ -20,7 +20,6 @@ const TableGrid: React.FC = () => {
     action: "open" | "close" | "reserve" | "maintenance"
   ) => {
     if (!currentUser) return;
-
     try {
       switch (action) {
         case "open":
@@ -44,12 +43,29 @@ const TableGrid: React.FC = () => {
     }
   };
 
-  const getStatusCounts = () => {
-    if (!tables) return {};
-    return tables.reduce((acc, table) => {
-      acc[table.status] = (acc[table.status] || 0) + 1;
-      return acc;
-    }, {} as Record<TableStatus, number>);
+  const getStatusCounts = (): Record<TableStatus, number> => {
+    if (!tables)
+      return {
+        AVAILABLE: 0,
+        IN_USE: 0,
+        RESERVED: 0,
+        MAINTENANCE: 0,
+        PRAYER_TIME: 0,
+      };
+
+    return tables.reduce<Record<TableStatus, number>>(
+      (acc, table) => {
+        acc[table.status] = (acc[table.status] || 0) + 1;
+        return acc;
+      },
+      {
+        AVAILABLE: 0,
+        IN_USE: 0,
+        RESERVED: 0,
+        MAINTENANCE: 0,
+        PRAYER_TIME: 0,
+      }
+    );
   };
 
   if (isLoading) {
@@ -86,7 +102,7 @@ const TableGrid: React.FC = () => {
             <TableStatusBadge
               key={status}
               status={status}
-              count={statusCounts[status] || 0}
+              count={statusCounts[status]}
             />
           ))}
         </div>

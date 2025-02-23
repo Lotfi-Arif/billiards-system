@@ -12,6 +12,7 @@
       "src/main.ts",
       "src/preload.ts",
       "src/config.ts",
+      "src/ipc/handlers.ts",
       "src/shared/**/*.ts",
       "forge.config.ts"
     ],
