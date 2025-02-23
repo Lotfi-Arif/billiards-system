@@ -1,12 +1,5 @@
 import { create } from "zustand";
-import { Role } from "@prisma/client";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-}
+import { User } from "@prisma/client";
 
 interface AuthState {
   currentUser: User | null;
