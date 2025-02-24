@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Role, User } from "@prisma/client";
 
 export interface UserCreateDTO {
   name: string;
@@ -19,17 +19,22 @@ export interface LoginDTO {
   password: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: Role;
-  };
-}
-
 export interface JWTPayload {
   userId: string;
   role: Role;
 }
+
+
+export interface UserDTO {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: UserDTO;
+}
+
+export type CurrentUserResponse = UserDTO | null;

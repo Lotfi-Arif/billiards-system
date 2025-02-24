@@ -1,11 +1,11 @@
 import React from "react";
 import { TableStatus } from "@prisma/client";
-import { TableWithSessions } from "../../../shared/types/Table";
+import { TableWithSessions } from "@shared/types/Table";
 
 interface TableCardProps {
   table: TableWithSessions;
   onAction?: (action: "open" | "close" | "reserve" | "maintenance") => void;
-  currentUser?: { id: string; role: string };
+  currentUser: { id: string; role: string } | null;
 }
 
 const TableCard: React.FC<TableCardProps> = ({
@@ -122,6 +122,10 @@ const TableCard: React.FC<TableCardProps> = ({
               Set Maintenance
             </button>
           )}
+        {/* Task 1: You can unset the maintainence if you are a manager */}
+        {/* Task 2: Add open table and timed table functionality, timed you can have a set amount of time from the beginning where the customer already paid...open is the customer playing for as long as they want but they accumalate the bill */}
+        {/* Task 3: Update the duration and cost of the session by cents and seconds so that it looks kinda like a taxi meter */}
+        {/* Task 4: Update the layout bar to showcase the userinfo, like the name and a default profile picture, also make the notification bell be a dropdown menu for user login/info */}
       </div>
     </div>
   );

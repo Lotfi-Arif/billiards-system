@@ -1,0 +1,24 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+      "composite": true,
+      "module": "CommonJS",
+      "moduleResolution": "node",
+      "outDir": "dist/main",
+      "noEmit": false
+    },
+    "include": [
+      "src/backend/**/*.ts",
+      "src/main.ts",
+      "src/preload.ts",
+      "src/config.ts",
+      "src/ipc/handlers.ts",
+      "src/shared/**/*.ts",
+      "forge.config.ts"
+    ],
+    "exclude": [
+      "src/renderer/**/*",
+      "**/*.test.ts",
+      "**/*.spec.ts"
+    ]
+  }

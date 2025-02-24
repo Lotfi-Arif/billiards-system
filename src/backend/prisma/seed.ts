@@ -49,19 +49,22 @@ async function main() {
     },
   });
 
-  // Create pool tables
+  // Create pool tables with non-null assertion since we know they will be created
   const tables = await Promise.all(
-    Array.from({ length: 5 }, (_, i) => i + 1).map((number) =>
+    Array.from({ length: 5 }).map((_, i) =>
       prisma.poolTable.create({
         data: {
-          number,
-          status:
-            number === 5 ? TableStatus.MAINTENANCE : TableStatus.AVAILABLE,
+          number: i + 1,
+          status: i === 4 ? TableStatus.MAINTENANCE : TableStatus.AVAILABLE,
           isLightOn: false,
         },
       })
     )
   );
+
+  if (!tables || tables.length === 0) {
+    throw new Error("Failed to create tables");
+  }
 
   // Create prayer times
   const prayerTimes = await Promise.all([
@@ -110,7 +113,7 @@ async function main() {
   // Create some active sessions
   const activeSession = await prisma.session.create({
     data: {
-      tableId: tables[0].id,
+      tableId: tables[0]!.id,
       userId: customer.id,
       type: SessionType.TIMED,
       duration: 60,
@@ -119,10 +122,16 @@ async function main() {
     },
   });
 
+  // Update table status for active session
+  await prisma.poolTable.update({
+    where: { id: tables[0]!.id },
+    data: { status: TableStatus.IN_USE },
+  });
+
   // Create some completed sessions
   const completedSession = await prisma.session.create({
     data: {
-      tableId: tables[1].id,
+      tableId: tables[1]!.id,
       userId: customer.id,
       type: SessionType.OPEN,
       startTime: new Date("2025-02-17T10:00:00Z"),
@@ -135,7 +144,7 @@ async function main() {
   // Create some reservations
   const pendingReservation = await prisma.reservation.create({
     data: {
-      tableId: tables[2].id,
+      tableId: tables[2]!.id,
       userId: customer.id,
       startTime: new Date("2025-02-17T20:00:00Z"),
       duration: 60,
@@ -145,12 +154,18 @@ async function main() {
 
   const confirmedReservation = await prisma.reservation.create({
     data: {
-      tableId: tables[3].id,
+      tableId: tables[3]!.id,
       userId: customer.id,
       startTime: new Date("2025-02-17T21:00:00Z"),
       duration: 120,
       status: ReservationStatus.CONFIRMED,
     },
+  });
+
+  // Update table status for confirmed reservation
+  await prisma.poolTable.update({
+    where: { id: tables[3]!.id },
+    data: { status: TableStatus.RESERVED },
   });
 
   // Create activity logs
@@ -166,14 +181,14 @@ async function main() {
       data: {
         userId: staff.id,
         action: "SESSION_STARTED",
-        details: `Started session for table ${tables[0].number}`,
+        details: `Started session for table ${tables[0]!.number}`,
       },
     }),
     prisma.activityLog.create({
       data: {
         userId: staff.id,
         action: "RESERVATION_CONFIRMED",
-        details: `Confirmed reservation for table ${tables[3].number}`,
+        details: `Confirmed reservation for table ${tables[3]!.number}`,
       },
     }),
   ]);

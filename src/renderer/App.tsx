@@ -7,10 +7,26 @@ import SessionsPage from "./pages/SessionsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
+import LoginPage from "./pages/LoginPage";
 import { TableProvider } from "./contexts/TableContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { WebSocketProvider } from "./contexts/WebSocketContext";
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>("dashboard");
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const renderPage = () => {
     switch (currentPage) {
@@ -37,6 +53,14 @@ const App: React.FC = () => {
         <div className="h-full">{renderPage()}</div>
       </TableProvider>
     </MainLayout>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
 

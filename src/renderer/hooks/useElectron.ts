@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { ElectronAPI, ApiResponse } from "@/shared/types/electronAPI";
 
 type ElectronApiFunction<T> = (api: ElectronAPI) => Promise<ApiResponse<T>>;
@@ -13,25 +13,31 @@ export function useElectron<T>(apiFn: ElectronApiFunction<T>) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Store the API function in a ref to maintain reference stability
+  const apiFnRef = useRef(apiFn);
+  apiFnRef.current = apiFn;
+
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-      // Access electron from window with type assertion if needed
-      const response = await apiFn(window.electron);
+      setError(null);
+
+      const response = await apiFnRef.current(window.electron);
 
       if (!response.success) {
         throw new Error(response.error || "Unknown error");
       }
 
       setData(response.data || null);
-      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
+      setData(null);
     } finally {
       setIsLoading(false);
     }
-  }, [apiFn]);
+  }, []); // No dependencies needed since we use ref
 
+  // Initial fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
