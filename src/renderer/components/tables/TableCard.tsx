@@ -122,6 +122,7 @@ const TableCard: React.FC<TableCardProps> = ({
               Set Maintenance
             </button>
           )}
+          {/* You can unset the maintainence if you are a manager*/}
       </div>
     </div>
   );

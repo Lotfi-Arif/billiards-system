@@ -5,10 +5,8 @@ import { UserService } from "./backend/UserService";
 import { PoolTableService } from "./backend/PoolTableService";
 import { PrismaClient } from "@prisma/client";
 import { ArduinoControlService } from "./backend/ArduinoControlService";
-import { WebSocketServer } from "ws";
 import { config } from "./config";
 import { setupAuthHandlers, setupTableHandlers } from "./ipc/handlers";
-import { WebSocketEvents } from "./shared/types/websocket";
 import { TableWebSocketServer } from "@backend/TableWebSocketServer";
 
 interface CurrentUserState {
@@ -83,56 +81,56 @@ async function cleanup() {
     }
   }
   await arduinoService.disconnect();
-  wsServer.close();
+  // wsServer.close();
   await prisma.$disconnect();
 }
 
 // Enhanced WebSocket message handling
-wss.on("connection", (ws) => {
-  console.log("Client connected to WebSocket");
+// wss.on("connection", (ws) => {
+//   console.log("Client connected to WebSocket");
 
-  ws.on("message", (message) => {
-    try {
-      const data = JSON.parse(message.toString());
-      console.log("Received WebSocket message:", data);
+//   ws.on("message", (message) => {
+//     try {
+//       const data = JSON.parse(message.toString());
+//       console.log("Received WebSocket message:", data);
       
-      // Handle different message types
-      switch (data.type) {
-        case "TABLE_UPDATE":
-          broadcastUpdate(WebSocketEvents.TABLE_UPDATED, data.payload);
-          break;
-        case "SESSION_UPDATE":
-          broadcastUpdate(WebSocketEvents.SESSION_UPDATED, data.payload);
-          break;
-        case "PRAYER_TIME_UPDATE":
-          broadcastUpdate(WebSocketEvents.PRAYER_TIME_UPDATED, data.payload);
-          break;
-        default:
-          console.log("Unhandled message type:", data.type);
-      }
-    } catch (error) {
-      console.error("Invalid message format:", error);
-    }
-  });
+//       // Handle different message types
+//       switch (data.type) {
+//         case "TABLE_UPDATE":
+//           broadcastUpdate(WebSocketEvents.TABLE_UPDATED, data.payload);
+//           break;
+//         case "SESSION_UPDATE":
+//           broadcastUpdate(WebSocketEvents.SESSION_UPDATED, data.payload);
+//           break;
+//         case "PRAYER_TIME_UPDATE":
+//           broadcastUpdate(WebSocketEvents.PRAYER_TIME_UPDATED, data.payload);
+//           break;
+//         default:
+//           console.log("Unhandled message type:", data.type);
+//       }
+//     } catch (error) {
+//       console.error("Invalid message format:", error);
+//     }
+//   });
 
-  ws.on("error", (error) => {
-    console.error("WebSocket client error:", error);
-  });
+//   ws.on("error", (error) => {
+//     console.error("WebSocket client error:", error);
+//   });
 
-  ws.on("close", () => {
-    console.log("Client disconnected from WebSocket");
-  });
-});
+//   ws.on("close", () => {
+//     console.log("Client disconnected from WebSocket");
+//   });
+// });
 
 // Function to broadcast updates
-function broadcastUpdate(event: WebSocketEvents, data: any) {
-  const message = JSON.stringify({ event, data });
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
+// function broadcastUpdate(event: WebSocketEvents, data: any) {
+//   const message = JSON.stringify({ event, data });
+//   wss.clients.forEach((client) => {
+//     if (client.readyState === WebSocket.OPEN) {
+//       client.send(message);
+//     }
+//   });
+// }
 
 // Handle app lifecycle
 app.whenReady().then(() => {
@@ -172,4 +170,4 @@ process.on("unhandledRejection", async (reason, promise) => {
 });
 
 // Export necessary items for testing
-export { broadcastUpdate, cleanup };
+export { cleanup };

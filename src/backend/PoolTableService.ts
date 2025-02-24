@@ -6,10 +6,14 @@ import {
 } from "@prisma/client";
 import { BaseService } from "./BaseService";
 import { CreateTableDTO, UpdateTableDTO } from "@/shared/types/Table";
-import { WebSocketServer } from "ws";
+
+const TRANSACTION_OPTIONS = {
+  timeout: 10000,
+  maxWait: 15000,
+};
 
 export class PoolTableService extends BaseService {
-  constructor(prisma: PrismaClient, wss?: WebSocketServer) {
+  constructor(prisma: PrismaClient) {
     super(prisma);
   }
 
@@ -49,18 +53,23 @@ export class PoolTableService extends BaseService {
   }
 
   async createTable(data: CreateTableDTO) {
-    const table = await this.prisma.poolTable.create({
-      data: {
-        number: data.number,
-        status: TableStatus.AVAILABLE,
-      },
-      include: {
-        sessions: true,
-      },
-    });
+    try {
+      const table = await this.prisma.poolTable.create({
+        data: {
+          number: data.number,
+          status: TableStatus.AVAILABLE,
+        },
+        include: {
+          sessions: true,
+        },
+      });
 
-    this.broadcastEvent("TABLE_CREATED", table);
-    return table;
+      await this.broadcastEvent("TABLE_CREATED", table);
+      return table;
+    } catch (error) {
+      console.error("Error creating table:", error);
+      throw error;
+    }
   }
 
   async openTable(
@@ -69,41 +78,61 @@ export class PoolTableService extends BaseService {
     sessionType: SessionType,
     duration?: number
   ) {
-    // Start a transaction
-    return this.prisma.$transaction(async (tx) => {
-      // Update table status
-      const table = await tx.poolTable.update({
+    try {
+      // Check table availability first
+      const existingTable = await this.prisma.poolTable.findUnique({
         where: { id: tableId },
-        data: { status: TableStatus.IN_USE },
-        include: { sessions: true },
       });
 
-      // Create new session
-      const session = await tx.session.create({
+      if (!existingTable || existingTable.status !== TableStatus.AVAILABLE) {
+        throw new Error("Table is not available");
+      }
+
+      // Update table and create session in one operation
+      const table = await this.prisma.poolTable.update({
+        where: { id: tableId },
         data: {
-          tableId,
-          userId,
-          type: sessionType,
-          duration,
-          status: SessionStatus.ACTIVE,
+          status: TableStatus.IN_USE,
+          sessions: {
+            create: {
+              userId,
+              type: sessionType,
+              duration,
+              status: SessionStatus.ACTIVE,
+            },
+          },
+        },
+        include: {
+          sessions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       });
 
-      await this.logActivity(
-        userId,
-        "TABLE_OPENED",
-        `Table ${table.number} opened`
-      );
-      this.broadcastEvent("TABLE_UPDATED", table);
+      // Handle non-critical operations separately
+      await Promise.all([
+        this.logActivity(
+          userId,
+          "TABLE_OPENED",
+          `Table ${table.number} opened`
+        ),
+        this.broadcastEvent("TABLE_UPDATED", table),
+      ]).catch((error) => {
+        console.error("Non-critical operations error:", error);
+      });
 
       return table;
-    });
+    } catch (error) {
+      console.error("Error opening table:", error);
+      throw error;
+    }
   }
 
   async closeTable(tableId: string, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      // Find active session
-      const activeSession = await tx.session.findFirst({
+    try {
+      // Find active session first
+      const activeSession = await this.prisma.session.findFirst({
         where: {
           tableId,
           status: SessionStatus.ACTIVE,
@@ -114,167 +143,225 @@ export class PoolTableService extends BaseService {
         throw new Error("No active session found for this table");
       }
 
-      // Calculate cost based on duration
       const duration = Math.ceil(
         (Date.now() - activeSession.startTime.getTime()) / (1000 * 60)
       );
       const cost = this.calculateSessionCost(duration, activeSession.type);
 
-      // Update session
-      await tx.session.update({
-        where: { id: activeSession.id },
+      // Update both table and session in one operation
+      const table = await this.prisma.poolTable.update({
+        where: { id: tableId },
         data: {
-          endTime: new Date(),
-          status: SessionStatus.COMPLETED,
-          cost,
+          status: TableStatus.AVAILABLE,
+          sessions: {
+            update: {
+              where: { id: activeSession.id },
+              data: {
+                endTime: new Date(),
+                status: SessionStatus.COMPLETED,
+                cost,
+              },
+            },
+          },
+        },
+        include: {
+          sessions: {
+            where: { id: activeSession.id },
+          },
         },
       });
 
-      // Update table status
-      const table = await tx.poolTable.update({
-        where: { id: tableId },
-        data: { status: TableStatus.AVAILABLE },
-        include: { sessions: true },
+      // Handle non-critical operations separately
+      await Promise.all([
+        this.logActivity(
+          userId,
+          "TABLE_CLOSED",
+          `Table ${table.number} closed`
+        ),
+        this.broadcastEvent("TABLE_UPDATED", table),
+      ]).catch((error) => {
+        console.error("Non-critical operations error:", error);
       });
 
-      await this.logActivity(
-        userId,
-        "TABLE_CLOSED",
-        `Table ${table.number} closed`
-      );
-      this.broadcastEvent("TABLE_UPDATED", table);
-
       return table;
-    });
+    } catch (error) {
+      console.error("Error closing table:", error);
+      throw error;
+    }
   }
 
   async updateTable(tableId: string, userId: string, data: UpdateTableDTO) {
-    const table = await this.prisma.poolTable.update({
-      where: { id: tableId },
-      data,
-      include: { sessions: true },
-    });
+    try {
+      const table = await this.prisma.poolTable.update({
+        where: { id: tableId },
+        data,
+        include: {
+          sessions: true,
+        },
+      });
 
-    await this.logActivity(
-      userId,
-      "TABLE_UPDATED",
-      `Table ${table.number} updated`
-    );
-    this.broadcastEvent("TABLE_UPDATED", table);
+      await Promise.all([
+        this.logActivity(
+          userId,
+          "TABLE_UPDATED",
+          `Table ${table.number} updated`
+        ),
+        this.broadcastEvent("TABLE_UPDATED", table),
+      ]).catch((error) => {
+        console.error("Non-critical operations error:", error);
+      });
 
-    return table;
+      return table;
+    } catch (error) {
+      console.error("Error updating table:", error);
+      throw error;
+    }
   }
 
   async setTableMaintenance(tableId: string, userId: string) {
-    const table = await this.prisma.poolTable.update({
-      where: { id: tableId },
-      data: { status: TableStatus.MAINTENANCE },
-      include: { sessions: true },
-    });
+    try {
+      const table = await this.prisma.poolTable.update({
+        where: { id: tableId },
+        data: { status: TableStatus.MAINTENANCE },
+        include: {
+          sessions: true,
+        },
+      });
 
-    await this.logActivity(
-      userId,
-      "TABLE_MAINTENANCE",
-      `Table ${table.number} set to maintenance`
-    );
-    this.broadcastEvent("TABLE_UPDATED", table);
+      await Promise.all([
+        this.logActivity(
+          userId,
+          "TABLE_MAINTENANCE",
+          `Table ${table.number} set to maintenance`
+        ),
+        this.broadcastEvent("TABLE_UPDATED", table),
+      ]).catch((error) => {
+        console.error("Non-critical operations error:", error);
+      });
 
-    return table;
+      return table;
+    } catch (error) {
+      console.error("Error setting table maintenance:", error);
+      throw error;
+    }
   }
 
   async getActiveSessions() {
-    return this.prisma.session.findMany({
-      where: {
-        status: SessionStatus.ACTIVE,
-      },
-      include: {
-        table: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    try {
+      return await this.prisma.session.findMany({
+        where: {
+          status: SessionStatus.ACTIVE,
+        },
+        include: {
+          table: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.error("Error getting active sessions:", error);
+      throw error;
+    }
   }
 
   async getTableSessions(tableId: string) {
-    return this.prisma.session.findMany({
-      where: {
-        tableId,
-        OR: [
-          { status: SessionStatus.ACTIVE },
-          {
-            AND: [
-              { status: SessionStatus.COMPLETED },
-              { endTime: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-            ],
-          },
-        ],
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    try {
+      return await this.prisma.session.findMany({
+        where: {
+          tableId,
+          OR: [
+            { status: SessionStatus.ACTIVE },
+            {
+              AND: [
+                { status: SessionStatus.COMPLETED },
+                {
+                  endTime: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+                },
+              ],
+            },
+          ],
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.error("Error getting table sessions:", error);
+      throw error;
+    }
   }
 
   async reserveTable(tableId: string, userId: string, duration: number) {
-    return this.prisma.$transaction(async (tx) => {
-      // Check if table is available
-      const table = await tx.poolTable.findUnique({
+    try {
+      // Check table availability first
+      const existingTable = await this.prisma.poolTable.findUnique({
         where: { id: tableId },
       });
 
-      if (!table || table.status !== TableStatus.AVAILABLE) {
+      if (!existingTable || existingTable.status !== TableStatus.AVAILABLE) {
         throw new Error("Table is not available for reservation");
       }
 
-      // Create reservation
-      await tx.reservation.create({
+      // Create reservation and update table in one operation
+      const table = await this.prisma.poolTable.update({
+        where: { id: tableId },
         data: {
-          tableId,
-          userId,
-          duration,
-          startTime: new Date(),
-          status: "CONFIRMED",
+          status: TableStatus.RESERVED,
+          reservations: {
+            create: {
+              userId,
+              duration,
+              startTime: new Date(),
+              status: "CONFIRMED",
+            },
+          },
+        },
+        include: {
+          sessions: true,
+          reservations: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       });
 
-      // Update table status
-      const updatedTable = await tx.poolTable.update({
-        where: { id: tableId },
-        data: { status: TableStatus.RESERVED },
-        include: { sessions: true },
+      // Handle non-critical operations separately
+      await Promise.all([
+        this.logActivity(
+          userId,
+          "TABLE_RESERVED",
+          `Table ${table.number} reserved`
+        ),
+        this.broadcastEvent("TABLE_UPDATED", table),
+      ]).catch((error) => {
+        console.error("Non-critical operations error:", error);
       });
 
-      await this.logActivity(
-        userId,
-        "TABLE_RESERVED",
-        `Table ${table.number} reserved`
-      );
-      this.broadcastEvent("TABLE_UPDATED", updatedTable);
-
-      return updatedTable;
-    });
+      return table;
+    } catch (error) {
+      console.error("Error reserving table:", error);
+      throw error;
+    }
   }
 
   private calculateSessionCost(duration: number, type: SessionType): number {
-    // Implement your cost calculation logic here
-    const HOURLY_RATE = 30; // $30 per hour
+    const HOURLY_RATE = 30;
     const MINUTE_RATE = HOURLY_RATE / 60;
 
     if (type === SessionType.TIMED) {
       return Math.ceil(duration * MINUTE_RATE);
     } else {
-      // For open sessions, maybe apply a different rate or minimum
       return Math.max(Math.ceil(duration * MINUTE_RATE), HOURLY_RATE);
     }
   }

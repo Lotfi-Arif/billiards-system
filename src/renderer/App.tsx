@@ -49,11 +49,9 @@ const AppContent: React.FC = () => {
 
   return (
     <MainLayout onNavigate={setCurrentPage} currentPage={currentPage}>
-      <WebSocketProvider url="ws://localhost:8080">
-        <TableProvider>
-          <div className="h-full">{renderPage()}</div>
-        </TableProvider>
-      </WebSocketProvider>
+      <TableProvider>
+        <div className="h-full">{renderPage()}</div>
+      </TableProvider>
     </MainLayout>
   );
 };

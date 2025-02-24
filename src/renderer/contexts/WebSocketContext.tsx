@@ -1,7 +1,5 @@
-// src/renderer/contexts/WebSocketContext.tsx
 import React, {
   createContext,
-  useContext,
   useEffect,
   useRef,
   useState,
