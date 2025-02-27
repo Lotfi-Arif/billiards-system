@@ -218,11 +218,11 @@ export class PoolTableService extends BaseService {
     }
   }
 
-  async setTableMaintenance(tableId: string, userId: string) {
+  async toggleMaintenance(tableId: string, userId: string) {
     try {
       const table = await this.prisma.poolTable.update({
         where: { id: tableId },
-        data: { status: TableStatus.MAINTENANCE },
+        data: { status: TableStatus.MAINTENANCE ? TableStatus.AVAILABLE : TableStatus.MAINTENANCE },
         include: {
           sessions: true,
         },

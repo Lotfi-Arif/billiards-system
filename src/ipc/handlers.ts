@@ -106,7 +106,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
   createHandler(
     IpcChannels.TABLE_MAINTENANCE,
     async ({ tableId, userId }) => {
-      const table = await tableService.setTableMaintenance(tableId, userId);
+      const table = await tableService.toggleMaintenance(tableId, userId);
       if (!table) throw new Error("Failed to set table maintenance");
       return table;
     },

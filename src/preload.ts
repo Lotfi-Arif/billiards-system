@@ -57,7 +57,7 @@ const api: ElectronAPI = {
     data: { status?: TableStatus; isLightOn?: boolean }
   ) => ipcRenderer.invoke(IpcChannels.TABLE_UPDATE, { tableId, userId, data }),
 
-  setTableMaintenance: (tableId: string, userId: string) =>
+  toggleMaintenance: (tableId: string, userId: string) =>
     ipcRenderer.invoke(IpcChannels.TABLE_MAINTENANCE, { tableId, userId }),
 
   reserveTable: (tableId: string, userId: string, duration: number) =>
