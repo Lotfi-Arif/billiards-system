@@ -15,7 +15,7 @@ interface TableState {
     duration?: number
   ) => Promise<void>;
   closeTable: (tableId: string, userId: string) => Promise<void>;
-  setTableMaintenance: (tableId: string, userId: string) => Promise<void>;
+  toggleMaintenance: (tableId: string, userId: string) => Promise<void>;
   updateTableStatus: (
     tableId: string,
     userId: string,
@@ -93,10 +93,10 @@ export const useTableStore = create<TableState>((set, get) => ({
     }
   },
 
-  setTableMaintenance: async (tableId, userId) => {
+  toggleMaintenance: async (tableId, userId) => {
     try {
       set({ isLoading: true });
-      const response = await window.electron.setTableMaintenance(
+      const response = await window.electron.toggleMaintenance(
         tableId,
         userId
       );

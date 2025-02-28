@@ -50,7 +50,7 @@ export interface ElectronAPI {
     userId: string,
     data: { status?: TableStatus; isLightOn?: boolean }
   ): Promise<ApiResponse<TableWithSessions>>;
-  setTableMaintenance(
+  toggleMaintenance(
     tableId: string,
     userId: string
   ): Promise<ApiResponse<TableWithSessions>>;

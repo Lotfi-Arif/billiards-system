@@ -4,7 +4,7 @@ import { TableWithSessions } from "@shared/types/Table";
 
 interface TableCardProps {
   table: TableWithSessions;
-  onAction?: (action: "open" | "close" | "reserve" | "maintenance") => void;
+  onAction?: (action: "open" | "close" | "reserve" | "toggleMaintenance") => void;
   currentUser: { id: string; role: string } | null;
 }
 
@@ -114,16 +114,34 @@ const TableCard: React.FC<TableCardProps> = ({
           </button>
         )}
         {currentUser?.role === "MANAGER" &&
-          table.status !== TableStatus.MAINTENANCE && (
+          table.status === TableStatus.MAINTENANCE ? (
             <button
-              onClick={() => onAction?.("maintenance")}
+              onClick={() => onAction?.("toggleMaintenance")}
+              className="col-span-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors mt-2"
+            >
+              End Maintenance
+            </button> 
+          ) : (
+            <button
+              onClick={() => onAction?.("toggleMaintenance")}
               className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-colors mt-2"
             >
-              Set Maintenance
+              Start Maintenance
             </button>
           )}
         {/* Task 1: You can unset the maintainence if you are a manager */}
+        {/* {currentUser?.role === "MANAGER" && 
+          table.status === TableStatus.MAINTENANCE && (
+            <button
+              onClick={() => onAction?.("maintenance")}
+              className="col-span-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors mt-2"
+            >
+              End Maintenance
+            </button>
+          )          
+        } */}
         {/* Task 2: Add open table and timed table functionality, timed you can have a set amount of time from the beginning where the customer already paid...open is the customer playing for as long as they want but they accumalate the bill */}
+        
         {/* Task 3: Update the duration and cost of the session by cents and seconds so that it looks kinda like a taxi meter */}
         {/* Task 4: Update the layout bar to showcase the userinfo, like the name and a default profile picture, also make the notification bell be a dropdown menu for user login/info */}
       </div>

@@ -11,7 +11,7 @@ const TableGrid: React.FC = () => {
 
   const handleTableAction = async (
     tableId: string,
-    action: "open" | "close" | "reserve" | "maintenance"
+    action: "open" | "close" | "reserve" | "toggleMaintenance"
   ) => {
     if (!currentUser) return;
 
@@ -26,8 +26,8 @@ const TableGrid: React.FC = () => {
         case "reserve":
           await window.electron.reserveTable(tableId, currentUser.id, 60);
           break;
-        case "maintenance":
-          await window.electron.setTableMaintenance(tableId, currentUser.id);
+        case "toggleMaintenance":
+          await window.electron.toggleMaintenance(tableId, currentUser.id);
           break;
       }
       await refreshTables();
