@@ -302,59 +302,6 @@ export class PoolTableService extends BaseService {
     }
   }
 
-  async reserveTable(tableId: string, userId: string, duration: number) {
-    try {
-      // Check table availability first
-      const existingTable = await this.prisma.poolTable.findUnique({
-        where: { id: tableId },
-      });
-
-      if (!existingTable || existingTable.status !== TableStatus.AVAILABLE) {
-        throw new Error("Table is not available for reservation");
-      }
-
-      // Create reservation and update table in one operation
-      const table = await this.prisma.poolTable.update({
-        where: { id: tableId },
-        data: {
-          status: TableStatus.RESERVED,
-          reservations: {
-            create: {
-              userId,
-              duration,
-              startTime: new Date(),
-              status: "CONFIRMED",
-            },
-          },
-        },
-        include: {
-          sessions: true,
-          reservations: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      });
-
-      // Handle non-critical operations separately
-      await Promise.all([
-        this.logActivity(
-          userId,
-          "TABLE_RESERVED",
-          `Table ${table.number} reserved`
-        ),
-        this.broadcastEvent("TABLE_UPDATED", table),
-      ]).catch((error) => {
-        console.error("Non-critical operations error:", error);
-      });
-
-      return table;
-    } catch (error) {
-      console.error("Error reserving table:", error);
-      throw error;
-    }
-  }
-
   private calculateSessionCost(duration: number, type: SessionType): number {
     const HOURLY_RATE = 30;
     const MINUTE_RATE = HOURLY_RATE / 60;

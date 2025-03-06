@@ -11,7 +11,7 @@ const TableGrid: React.FC = () => {
 
   const handleTableAction = async (
     tableId: string,
-    action: "open" | "close" | "reserve" | "maintenance"
+    action: "open" | "close" | "reserve" | "maintenance",
   ) => {
     if (!currentUser) return;
 
@@ -48,7 +48,7 @@ const TableGrid: React.FC = () => {
         RESERVED: 0,
         MAINTENANCE: 0,
         PRAYER_TIME: 0,
-      }
+      },
     );
   }, [tables]);
 
