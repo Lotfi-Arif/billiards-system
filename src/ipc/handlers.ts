@@ -8,15 +8,15 @@ import { ipcMain } from "electron";
 function createHandler<K extends IpcChannels>(
   channel: K,
   handler: (
-    args: TableOperations[K]["request"]
+    args: TableOperations[K]["request"],
   ) => Promise<TableOperations[K]["response"]>,
-  errorMessage: string = "Operation failed"
+  errorMessage: string = "Operation failed",
 ) {
   return ipcMain.handle(
     channel,
     async (
       _,
-      args: TableOperations[K]["request"]
+      args: TableOperations[K]["request"],
     ): Promise<ApiResponse<TableOperations[K]["response"]>> => {
       try {
         const result = await handler(args);
@@ -31,7 +31,7 @@ function createHandler<K extends IpcChannels>(
           error: error instanceof Error ? error.message : errorMessage,
         };
       }
-    }
+    },
   );
 }
 
@@ -44,7 +44,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!tables) throw new Error("Failed to fetch tables");
       return tables;
     },
-    "Failed to fetch tables"
+    "Failed to fetch tables",
   );
 
   createHandler(
@@ -54,7 +54,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!table) throw new Error("Table not found");
       return table;
     },
-    "Failed to fetch table status"
+    "Failed to fetch table status",
   );
 
   // Table management operations
@@ -65,7 +65,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!table) throw new Error("Failed to create table");
       return table;
     },
-    "Failed to create table"
+    "Failed to create table",
   );
 
   createHandler(
@@ -75,12 +75,12 @@ export function setupTableHandlers(tableService: PoolTableService) {
         tableId,
         userId,
         sessionType,
-        duration
+        duration,
       );
       if (!table) throw new Error("Failed to open table");
       return table;
     },
-    "Failed to open table"
+    "Failed to open table",
   );
 
   createHandler(
@@ -90,7 +90,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!table) throw new Error("Failed to close table");
       return table;
     },
-    "Failed to close table"
+    "Failed to close table",
   );
 
   createHandler(
@@ -100,7 +100,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!table) throw new Error("Failed to update table");
       return table;
     },
-    "Failed to update table"
+    "Failed to update table",
   );
 
   createHandler(
@@ -110,17 +110,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!table) throw new Error("Failed to set table maintenance");
       return table;
     },
-    "Failed to set table maintenance"
-  );
-
-  createHandler(
-    IpcChannels.TABLE_RESERVE,
-    async ({ tableId, userId, duration }) => {
-      const table = await tableService.reserveTable(tableId, userId, duration);
-      if (!table) throw new Error("Failed to reserve table");
-      return table;
-    },
-    "Failed to reserve table"
+    "Failed to set table maintenance",
   );
 
   // Session operations
@@ -131,7 +121,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!sessions) throw new Error("Failed to fetch active sessions");
       return sessions;
     },
-    "Failed to fetch active sessions"
+    "Failed to fetch active sessions",
   );
 
   createHandler(
@@ -141,7 +131,7 @@ export function setupTableHandlers(tableService: PoolTableService) {
       if (!sessions) throw new Error("Failed to fetch table sessions");
       return sessions;
     },
-    "Failed to fetch table sessions"
+    "Failed to fetch table sessions",
   );
 }
 
@@ -154,7 +144,7 @@ export function setupAuthHandlers(userService: UserService) {
       if (!result) throw new Error("Login failed");
       return result;
     },
-    "Failed to login"
+    "Failed to login",
   );
 
   createHandler(
@@ -163,7 +153,7 @@ export function setupAuthHandlers(userService: UserService) {
       if (!userId) throw new Error("User ID is required");
       await userService.logout(userId);
     },
-    "Failed to logout"
+    "Failed to logout",
   );
 
   createHandler(
@@ -174,7 +164,7 @@ export function setupAuthHandlers(userService: UserService) {
       if (!user) throw new Error("User not found");
       return user;
     },
-    "Failed to get current user"
+    "Failed to get current user",
   );
 }
 

@@ -1,52 +1,13 @@
-// src/backend/ReservationService.ts
-import {
-  PrismaClient,
-  ReservationStatus,
-  TableStatus,
-  Reservation,
-  PoolTable,
-  User,
-} from "@prisma/client";
+import { PrismaClient, ReservationStatus, TableStatus } from "@prisma/client";
 import { BaseService } from "./BaseService";
+import {
+  CreateReservationDTO,
+  ReservationWithRelations,
+  TableAvailability,
+  UpdateReservationDTO,
+} from "@shared/types/Reservation";
 import { WebSocketServer } from "ws";
 import logger from "@/shared/logger";
-
-type ReservationWithRelations = Reservation & {
-  table: PoolTable;
-  user: Pick<User, "id" | "name" | "email">;
-};
-
-interface CreateReservationDTO {
-  tableId: string;
-  userId: string;
-  startTime: Date;
-  duration: number; // in minutes
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  numberOfPeople?: number;
-  notes?: string;
-}
-
-interface TableSlots {
-  tableNumber: number;
-  slots: Record<string, boolean>;
-}
-
-interface UpdateReservationDTO {
-  status?: ReservationStatus;
-  startTime?: Date;
-  duration?: number;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  numberOfPeople?: number;
-  notes?: string;
-}
-
-interface TableAvailability {
-  [tableId: string]: TableSlots;
-}
 
 export class ReservationService extends BaseService {
   constructor(prisma: PrismaClient, wss?: WebSocketServer) {
@@ -456,11 +417,12 @@ export class ReservationService extends BaseService {
 
           // A slot is available if there are no conflicting reservations or prayer times
           // and the table is not in maintenance or prayer time status
-          // availability[table.id].slots[timeSlotKey] =
-          //   !conflictingReservation &&
-          //   !conflictingPrayerTime &&
-          //   table.status !== TableStatus.MAINTENANCE &&
-          //   table.status !== TableStatus.PRAYER_TIME;
+          // TODO: find a better way to determine the available tab/reservation
+          availability[table.id].slots[timeSlotKey] =
+            !conflictingReservation &&
+            !conflictingPrayerTime &&
+            table.status !== TableStatus.MAINTENANCE &&
+            table.status !== TableStatus.PRAYER_TIME;
         });
       });
 

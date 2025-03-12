@@ -1,4 +1,3 @@
-// src/renderer/contexts/TableContext.tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { TableWithSessions } from "@/shared/types/Table";
 

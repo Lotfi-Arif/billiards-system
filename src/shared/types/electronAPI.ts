@@ -1,6 +1,12 @@
 import { TableStatus, SessionType, SessionStatus } from "@prisma/client";
 import { TableWithSessions } from "./Table";
 import { AuthResponse, CurrentUserResponse } from "./User";
+import {
+  CreateReservationDTO,
+  ReservationWithRelations,
+  TableAvailability,
+  UpdateReservationDTO,
+} from "./Reservation";
 
 export interface SessionData {
   id: string;
@@ -39,20 +45,20 @@ export interface ElectronAPI {
     tableId: string,
     userId: string,
     sessionType: SessionType,
-    duration?: number
+    duration?: number,
   ): Promise<ApiResponse<TableWithSessions>>;
   closeTable(
     tableId: string,
-    userId: string
+    userId: string,
   ): Promise<ApiResponse<TableWithSessions>>;
   updateTable(
     tableId: string,
     userId: string,
-    data: { status?: TableStatus; isLightOn?: boolean }
+    data: { status?: TableStatus; isLightOn?: boolean },
   ): Promise<ApiResponse<TableWithSessions>>;
   setTableMaintenance(
     tableId: string,
-    userId: string
+    userId: string,
   ): Promise<ApiResponse<TableWithSessions>>;
 
   // Session operations
@@ -60,11 +66,35 @@ export interface ElectronAPI {
   getTableSessions(tableId: string): Promise<ApiResponse<SessionData[]>>;
 
   // Reservation operations
-  reserveTable(
-    tableId: string,
+  getAllReservations(): Promise<ApiResponse<ReservationWithRelations[]>>;
+  getReservationsByDate(
+    date: Date,
+  ): Promise<ApiResponse<ReservationWithRelations[]>>;
+  getReservationById(
+    id: string,
+  ): Promise<ApiResponse<ReservationWithRelations | null>>;
+  createReservation(
+    data: CreateReservationDTO,
+    staffUserId: string,
+  ): Promise<ApiResponse<ReservationWithRelations>>;
+  updateReservation(
+    id: string,
+    data: UpdateReservationDTO,
     userId: string,
-    duration: number
-  ): Promise<ApiResponse<TableWithSessions>>;
+  ): Promise<ApiResponse<ReservationWithRelations>>;
+  cancelReservation(
+    id: string,
+    userId: string,
+  ): Promise<ApiResponse<ReservationWithRelations>>;
+  completeReservation(
+    id: string,
+    userId: string,
+  ): Promise<ApiResponse<ReservationWithRelations>>;
+  getAvailableTimeSlots(
+    date: Date,
+    tableId?: string,
+  ): Promise<ApiResponse<TableAvailability>>;
+  getUpcomingReservations(): Promise<ApiResponse<ReservationWithRelations[]>>;
 
   // WebSocket events
   onTableUpdate(callback: (data: TableWithSessions) => void): () => void;
