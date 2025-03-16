@@ -318,113 +318,113 @@ export class ReservationService extends BaseService {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Get all reservations for the specified date
-      const reservations = await this.prisma.reservation.findMany({
-        where: {
-          startTime: {
-            gte: startOfDay,
-            lt: endOfDay,
+      // Get tables, reservations, and prayer times in parallel
+      const [tables, reservations, prayerTimes] = await Promise.all([
+        // Get tables (filtered if tableId is provided)
+        this.prisma.poolTable.findMany({
+          where: tableId ? { id: tableId } : undefined,
+        }),
+
+        // Get active reservations for the day
+        this.prisma.reservation.findMany({
+          where: {
+            startTime: { gte: startOfDay, lt: endOfDay },
+            ...(tableId ? { tableId } : {}),
+            status: {
+              in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED],
+            },
           },
-          ...(tableId ? { tableId } : {}),
-          status: {
-            in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED],
+        }),
+
+        // Get prayer times for the day
+        this.prisma.prayerTime.findMany({
+          where: {
+            time: { gte: startOfDay, lt: endOfDay },
           },
-        },
-        include: {
-          table: true,
-        },
+        }),
+      ]);
+
+      // Generate hourly time slots from 10 AM to 10 PM
+      const timeSlots = Array.from({ length: 13 }, (_, i) => {
+        const slot = new Date(date);
+        slot.setHours(10 + i, 0, 0, 0);
+        return slot;
       });
 
-      // Get prayer times for the specified date
-      const prayerTimes = await this.prisma.prayerTime.findMany({
-        where: {
-          time: {
-            gte: startOfDay,
-            lt: endOfDay,
-          },
-        },
-      });
+      // Helper function to format time slot keys (e.g., "10:00 AM")
+      const formatTimeSlot = (time: Date): string => {
+        const hour = time.getHours();
+        return `${hour > 12 ? hour - 12 : hour}:00 ${hour >= 12 ? "PM" : "AM"}`;
+      };
 
-      // Get all tables (or the specific table if tableId is provided)
-      const tables = tableId
-        ? await this.prisma.poolTable.findMany({
-            where: { id: tableId },
-          })
-        : await this.prisma.poolTable.findMany();
+      // Helper function to check if a time slot conflicts with a reservation
+      const conflictsWithReservation = (
+        tableId: string,
+        slotTime: Date
+      ): boolean => {
+        const slotEnd = new Date(slotTime.getTime() + 60 * 60 * 1000); // 1 hour later
 
-      // Generate time slots from 10 AM to 10 PM (12 hours), hourly intervals
-      const timeSlots: Date[] = Array.from({ length: 13 }, (_, index) => {
-        const slotTime = new Date(date);
-        slotTime.setHours(10 + index, 0, 0, 0);
-        return slotTime;
-      });
+        return reservations.some((res) => {
+          if (res.tableId !== tableId) return false;
 
-      // For each table, determine availability for each time slot
-      const availability: TableAvailability = {};
+          const resStart = new Date(res.startTime);
+          const resEnd = new Date(
+            resStart.getTime() + res.duration * 60 * 1000
+          );
 
-      tables.forEach((table) => {
-        // Initialize the table entry
-        availability[table.id] = {
-          tableNumber: table.number,
-          slots: {},
-        };
+          return (
+            (slotTime >= resStart && slotTime < resEnd) || // Slot starts during reservation
+            (slotEnd > resStart && slotEnd <= resEnd) || // Slot ends during reservation
+            (slotTime <= resStart && slotEnd >= resEnd) // Reservation contained within slot
+          );
+        });
+      };
 
-        timeSlots.forEach((slotTime) => {
-          const timeSlotKey = `${
-            slotTime.getHours() > 12
-              ? slotTime.getHours() - 12
-              : slotTime.getHours()
-          }:00 ${slotTime.getHours() >= 12 ? "PM" : "AM"}`;
+      // Helper function to check if a time slot conflicts with prayer time
+      const conflictsWithPrayer = (slotTime: Date): boolean => {
+        const slotEnd = new Date(slotTime.getTime() + 60 * 60 * 1000); // 1 hour later
 
-          // Check if there are any reservations that overlap with this time slot
-          const conflictingReservation = reservations.find((res) => {
-            if (res.tableId !== table.id) return false;
+        return prayerTimes.some((prayer) => {
+          const prayerStart = new Date(prayer.time);
+          const prayerEnd = new Date(
+            prayerStart.getTime() + prayer.durationMinutes * 60 * 1000
+          );
 
-            const resStart = new Date(res.startTime);
-            const resEnd = new Date(
-              new Date(res.startTime).getTime() + res.duration * 60 * 1000
-            );
+          return (
+            (slotTime >= prayerStart && slotTime < prayerEnd) || // Slot starts during prayer
+            (slotEnd > prayerStart && slotEnd <= prayerEnd) || // Slot ends during prayer
+            (slotTime <= prayerStart && slotEnd >= prayerEnd) // Prayer contained within slot
+          );
+        });
+      };
 
-            return (
-              (slotTime >= resStart && slotTime < resEnd) || // Time slot starts during reservation
-              (new Date(slotTime.getTime() + 60 * 60 * 1000) > resStart &&
-                new Date(slotTime.getTime() + 60 * 60 * 1000) <= resEnd) // Next hour is during reservation
-            );
-          });
+      // Build the availability object
+      const availability: TableAvailability = tables.reduce((acc, table) => {
+        // Initialize the table entry with all time slots
+        const slots = timeSlots.reduce((slotMap, slotTime) => {
+          const timeSlotKey = formatTimeSlot(slotTime);
 
-          // Check if there are any prayer times that overlap with this time slot
-          const conflictingPrayerTime = prayerTimes.find((prayer) => {
-            const prayerStart = new Date(prayer.time);
-            const prayerEnd = new Date(
-              prayerStart.getTime() + prayer.durationMinutes * 60 * 1000
-            );
-
-            return (
-              (slotTime >= prayerStart && slotTime < prayerEnd) || // Time slot starts during prayer
-              (new Date(slotTime.getTime() + 60 * 60 * 1000) > prayerStart &&
-                new Date(slotTime.getTime() + 60 * 60 * 1000) <= prayerEnd) // Next hour is during prayer
-            );
-          });
-
-          if (availability[table.id]?.slots[timeSlotKey] === undefined) {
-            logger.error(
-              `Error getting available time slots: table ${table.id} not found in availability object`
-            );
-            throw new Error(
-              `Table ${table.id} not found in availability object`
-            );
-          }
-
-          // A slot is available if there are no conflicting reservations or prayer times
-          // and the table is not in maintenance or prayer time status
-          // TODO: find a better way to determine the available tab/reservation
-          availability[table.id].slots[timeSlotKey] =
-            !conflictingReservation &&
-            !conflictingPrayerTime &&
+          // A slot is available if:
+          // 1. No conflicting reservations
+          // 2. No conflicting prayer times
+          // 3. Table is not in maintenance or prayer time status
+          const isAvailable =
+            !conflictsWithReservation(table.id, slotTime) &&
+            !conflictsWithPrayer(slotTime) &&
             table.status !== TableStatus.MAINTENANCE &&
             table.status !== TableStatus.PRAYER_TIME;
-        });
-      });
+
+          slotMap[timeSlotKey] = isAvailable;
+          return slotMap;
+        }, {} as Record<string, boolean>);
+
+        acc[table.id] = {
+          tableNumber: table.number,
+          slots,
+        };
+
+        return acc;
+      }, {} as TableAvailability);
 
       return availability;
     } catch (error) {

@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage";
 import { TableProvider } from "./contexts/TableContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { WebSocketProvider } from "./contexts/WebSocketContext";
+import { ReservationProvider } from "./contexts/ReservationContext";
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>("dashboard");
@@ -50,7 +51,9 @@ const AppContent: React.FC = () => {
   return (
     <MainLayout onNavigate={setCurrentPage} currentPage={currentPage}>
       <TableProvider>
-        <div className="h-full">{renderPage()}</div>
+        <ReservationProvider>
+          <div className="h-full">{renderPage()}</div>
+        </ReservationProvider>
       </TableProvider>
     </MainLayout>
   );
