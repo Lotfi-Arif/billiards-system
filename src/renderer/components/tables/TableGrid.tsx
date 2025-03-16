@@ -1,21 +1,17 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { TableStatus } from "@prisma/client";
 import TableCard from "./TableCard";
 import TableStatusBadge from "./TableStatusBadge";
-import { useElectron } from "@/hooks/useElectron";
-import { useAuth } from "@/contexts/AuthContext";
+import { useTables } from "@/renderer/contexts/TableContext";
+import { useAuth } from "@/renderer/contexts/AuthContext";
 
 const TableGrid: React.FC = () => {
-  const {
-    data: tables,
-    isLoading,
-    error,
-  } = useElectron((api) => api.getTables());
+  const { tables, isLoading, error, refreshTables } = useTables();
   const { currentUser } = useAuth();
 
   const handleTableAction = async (
     tableId: string,
-    action: "open" | "close" | "reserve" | "maintenance"
+    action: "open" | "close" | "reserve" | "maintenance",
   ) => {
     if (!currentUser) return;
 
@@ -27,22 +23,34 @@ const TableGrid: React.FC = () => {
         case "close":
           await window.electron.closeTable(tableId, currentUser.id);
           break;
+        case "reserve":
+          await window.electron.reserveTable(tableId, currentUser.id, 60);
+          break;
         case "maintenance":
           await window.electron.setTableMaintenance(tableId, currentUser.id);
           break;
       }
+      await refreshTables();
     } catch (error) {
       console.error(`Error handling table action: ${action}`, error);
     }
   };
 
-  const getStatusCounts = () => {
-    if (!tables) return {};
-    return tables.reduce((acc, table) => {
-      acc[table.status] = (acc[table.status] || 0) + 1;
-      return acc;
-    }, {} as Record<TableStatus, number>);
-  };
+  const statusCounts = useMemo(() => {
+    return tables.reduce<Record<TableStatus, number>>(
+      (acc, table) => {
+        acc[table.status] = (acc[table.status] || 0) + 1;
+        return acc;
+      },
+      {
+        AVAILABLE: 0,
+        IN_USE: 0,
+        RESERVED: 0,
+        MAINTENANCE: 0,
+        PRAYER_TIME: 0,
+      },
+    );
+  }, [tables]);
 
   if (isLoading) {
     return (
@@ -57,31 +65,33 @@ const TableGrid: React.FC = () => {
       <div className="rounded-md bg-red-50 p-4 my-4">
         <div className="flex">
           <div className="ml-3">
-            <p className="text-sm text-red-700">{error.message}</p>
+            <h3 className="text-sm font-medium text-red-800">
+              Error loading tables
+            </h3>
+            <p className="text-sm text-red-700 mt-2">{error.message}</p>
           </div>
         </div>
       </div>
     );
   }
 
-  const statusCounts = getStatusCounts();
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Pool Tables</h2>
         <div className="flex space-x-2">
-          {Object.values(TableStatus).map((status) => (
+          {Object.entries(statusCounts).map(([status, count]) => (
             <TableStatusBadge
               key={status}
-              status={status}
-              count={statusCounts[status] || 0}
+              status={status as TableStatus}
+              count={count}
             />
           ))}
         </div>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {tables?.map((table) => (
+        {tables.map((table) => (
           <TableCard
             key={table.id}
             table={table}
