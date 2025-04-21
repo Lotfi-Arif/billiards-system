@@ -73,7 +73,7 @@ export class ReservationService extends BaseService {
   }
 
   async getReservationById(
-    id: string
+    id: string,
   ): Promise<ReservationWithRelations | null> {
     try {
       return await this.prisma.reservation.findUnique({
@@ -97,7 +97,7 @@ export class ReservationService extends BaseService {
 
   async createReservation(
     data: CreateReservationDTO,
-    staffUserId: string
+    staffUserId: string,
   ): Promise<ReservationWithRelations> {
     try {
       // Check if table is available during requested time
@@ -117,7 +117,7 @@ export class ReservationService extends BaseService {
                 startTime: {
                   gte: new Date(
                     new Date(data.startTime).getTime() -
-                      data.duration * 60 * 1000
+                      data.duration * 60 * 1000,
                   ),
                 },
               },
@@ -126,7 +126,8 @@ export class ReservationService extends BaseService {
             {
               startTime: {
                 lte: new Date(
-                  new Date(data.startTime).getTime() + data.duration * 60 * 1000
+                  new Date(data.startTime).getTime() +
+                    data.duration * 60 * 1000,
                 ),
               },
               AND: {
@@ -165,7 +166,7 @@ export class ReservationService extends BaseService {
               AND: {
                 time: {
                   gte: new Date(
-                    startTime.getTime() - 30 * 60 * 1000 // 30 minutes is typical prayer duration
+                    startTime.getTime() - 30 * 60 * 1000, // 30 minutes is typical prayer duration
                   ),
                 },
               },
@@ -176,7 +177,7 @@ export class ReservationService extends BaseService {
 
       if (overlappingPrayerTimes.length > 0) {
         throw new Error(
-          "Cannot create reservation during prayer time. Please select another time."
+          "Cannot create reservation during prayer time. Please select another time.",
         );
       }
 
@@ -216,7 +217,7 @@ export class ReservationService extends BaseService {
       await this.logActivity(
         staffUserId,
         "RESERVATION_CREATED",
-        `Reservation created for table ${reservation.table.number} by ${reservation.customerName}`
+        `Reservation created for table ${reservation.table.number} by ${reservation.customerName}`,
       );
 
       // Broadcast the event
@@ -232,7 +233,7 @@ export class ReservationService extends BaseService {
   async updateReservation(
     id: string,
     data: UpdateReservationDTO,
-    userId: string
+    userId: string,
   ): Promise<ReservationWithRelations> {
     try {
       const reservation = await this.prisma.reservation.update({
@@ -262,7 +263,7 @@ export class ReservationService extends BaseService {
       await this.logActivity(
         userId,
         "RESERVATION_UPDATED",
-        `Reservation for table ${reservation.table.number} updated`
+        `Reservation for table ${reservation.table.number} updated`,
       );
 
       // Broadcast the event
@@ -275,15 +276,16 @@ export class ReservationService extends BaseService {
     }
   }
 
+  // Cancel a reservation
   async cancelReservation(
     id: string,
-    userId: string
+    userId: string,
   ): Promise<ReservationWithRelations> {
     try {
       return await this.updateReservation(
         id,
         { status: ReservationStatus.CANCELLED },
-        userId
+        userId,
       );
     } catch (error) {
       logger.error("Error cancelling reservation:", error);
@@ -293,13 +295,13 @@ export class ReservationService extends BaseService {
 
   async completeReservation(
     id: string,
-    userId: string
+    userId: string,
   ): Promise<ReservationWithRelations> {
     try {
       return await this.updateReservation(
         id,
         { status: ReservationStatus.COMPLETED },
-        userId
+        userId,
       );
     } catch (error) {
       logger.error("Error completing reservation:", error);
@@ -309,7 +311,7 @@ export class ReservationService extends BaseService {
 
   async getAvailableTimeSlots(
     date: Date,
-    tableId?: string
+    tableId?: string,
   ): Promise<TableAvailability> {
     try {
       const startOfDay = new Date(date);
@@ -360,7 +362,7 @@ export class ReservationService extends BaseService {
       // Helper function to check if a time slot conflicts with a reservation
       const conflictsWithReservation = (
         tableId: string,
-        slotTime: Date
+        slotTime: Date,
       ): boolean => {
         const slotEnd = new Date(slotTime.getTime() + 60 * 60 * 1000); // 1 hour later
 
@@ -369,7 +371,7 @@ export class ReservationService extends BaseService {
 
           const resStart = new Date(res.startTime);
           const resEnd = new Date(
-            resStart.getTime() + res.duration * 60 * 1000
+            resStart.getTime() + res.duration * 60 * 1000,
           );
 
           return (
@@ -387,7 +389,7 @@ export class ReservationService extends BaseService {
         return prayerTimes.some((prayer) => {
           const prayerStart = new Date(prayer.time);
           const prayerEnd = new Date(
-            prayerStart.getTime() + prayer.durationMinutes * 60 * 1000
+            prayerStart.getTime() + prayer.durationMinutes * 60 * 1000,
           );
 
           return (
@@ -401,22 +403,25 @@ export class ReservationService extends BaseService {
       // Build the availability object
       const availability: TableAvailability = tables.reduce((acc, table) => {
         // Initialize the table entry with all time slots
-        const slots = timeSlots.reduce((slotMap, slotTime) => {
-          const timeSlotKey = formatTimeSlot(slotTime);
+        const slots = timeSlots.reduce(
+          (slotMap, slotTime) => {
+            const timeSlotKey = formatTimeSlot(slotTime);
 
-          // A slot is available if:
-          // 1. No conflicting reservations
-          // 2. No conflicting prayer times
-          // 3. Table is not in maintenance or prayer time status
-          const isAvailable =
-            !conflictsWithReservation(table.id, slotTime) &&
-            !conflictsWithPrayer(slotTime) &&
-            table.status !== TableStatus.MAINTENANCE &&
-            table.status !== TableStatus.PRAYER_TIME;
+            // A slot is available if:
+            // 1. No conflicting reservations
+            // 2. No conflicting prayer times
+            // 3. Table is not in maintenance or prayer time status
+            const isAvailable =
+              !conflictsWithReservation(table.id, slotTime) &&
+              !conflictsWithPrayer(slotTime) &&
+              table.status !== TableStatus.MAINTENANCE &&
+              table.status !== TableStatus.PRAYER_TIME;
 
-          slotMap[timeSlotKey] = isAvailable;
-          return slotMap;
-        }, {} as Record<string, boolean>);
+            slotMap[timeSlotKey] = isAvailable;
+            return slotMap;
+          },
+          {} as Record<string, boolean>,
+        );
 
         acc[table.id] = {
           tableNumber: table.number,
